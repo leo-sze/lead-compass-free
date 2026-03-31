@@ -159,15 +159,25 @@ const Leads = () => {
             site: lead.site,
             instagram: lead.instagram,
             linkedin: lead.linkedin,
+            telefone: lead.telefone,
+            endereco: lead.endereco,
+            nome_decisor: lead.nome_decisor,
+            cidade: lead.cidade,
           },
         });
 
         if (error) throw error;
 
-        if (data?.nome_decisor && data.nome_decisor !== "Não identificado") {
-          await supabase.from("leads").update({ nome_decisor: data.nome_decisor }).eq("id", lead.id);
+        const updates = data?.updates || {};
+        // Backward compat: if only nome_decisor returned at top level
+        if (!updates.nome_decisor && data?.nome_decisor && data.nome_decisor !== "Não identificado") {
+          updates.nome_decisor = data.nome_decisor;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("leads").update(updates).eq("id", lead.id);
           setLeads((prev) =>
-            prev.map((l) => (l.id === lead.id ? { ...l, nome_decisor: data.nome_decisor } : l))
+            prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l))
           );
           enriched++;
         } else {
@@ -185,7 +195,7 @@ const Leads = () => {
     setEnrichProgress("");
     toast({
       title: "Enriquecimento concluído",
-      description: `${enriched} decisores encontrados, ${failed} não identificados.`,
+      description: `${enriched} leads enriquecidos, ${failed} sem dados novos.`,
     });
   }, [selected, selectedLeads, filtered, toast]);
 

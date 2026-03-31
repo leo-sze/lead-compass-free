@@ -142,6 +142,17 @@ Deno.serve(async (req) => {
     );
     scrapeLabels.push("LinkedIn Search");
 
+    // 3. Econodata and CNPJ lookup for decision makers
+    scrapePromises.push(
+      searchWeb(`"${nome_empresa}"${locationQuery} site:econodata.com.br sócio OR decisor OR proprietário`, FIRECRAWL_API_KEY)
+    );
+    scrapeLabels.push("Econodata Search");
+
+    scrapePromises.push(
+      searchWeb(`"${nome_empresa}"${locationQuery} CNPJ sócio OR quadro societário OR administrador`, FIRECRAWL_API_KEY)
+    );
+    scrapeLabels.push("CNPJ Search");
+
     const scrapeResults = await Promise.all(scrapePromises);
 
     let scrapedContent = "";

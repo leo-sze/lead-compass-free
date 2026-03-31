@@ -17,6 +17,7 @@ export type Database = {
       leads: {
         Row: {
           cidade: string | null
+          cnpj: string | null
           created_at: string
           endereco: string | null
           fonte: string | null
@@ -32,6 +33,7 @@ export type Database = {
         }
         Insert: {
           cidade?: string | null
+          cnpj?: string | null
           created_at?: string
           endereco?: string | null
           fonte?: string | null
@@ -47,6 +49,7 @@ export type Database = {
         }
         Update: {
           cidade?: string | null
+          cnpj?: string | null
           created_at?: string
           endereco?: string | null
           fonte?: string | null

@@ -117,9 +117,9 @@ const Leads = () => {
 
   const exportCSV = () => {
     const toExport = selected.size > 0 ? selectedLeads : leads;
-    const headers = ["Nome", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
+    const headers = ["Nome", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
     const rows = toExport.map((l) => [
-      l.nome_empresa, l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
+      l.nome_empresa, (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
       l.instagram || "", l.linkedin || "", l.termo_pesquisa || "", l.cidade || "", l.fonte || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -271,6 +271,7 @@ const Leads = () => {
                   />
                 </TableHead>
                 <TableHead>Empresa</TableHead>
+                <TableHead>CNPJ</TableHead>
                 <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Site</TableHead>
@@ -283,7 +284,7 @@ const Leads = () => {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
@@ -297,6 +298,7 @@ const Leads = () => {
                       />
                     </TableCell>
                     <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
+                    <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
                     <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
                     <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
                     <TableCell>

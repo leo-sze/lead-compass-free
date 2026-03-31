@@ -178,6 +178,7 @@ const Leads = () => {
                   />
                 </TableHead>
                 <TableHead>Empresa</TableHead>
+                <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Site</TableHead>
                 <TableHead>Endereço</TableHead>

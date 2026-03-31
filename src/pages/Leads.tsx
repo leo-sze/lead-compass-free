@@ -196,6 +196,25 @@ const Leads = () => {
               </Button>
             </>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={enrichLeads}
+            disabled={enriching}
+            className="border-accent/50 text-accent hover:bg-accent/10"
+          >
+            {enriching ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                {enrichProgress}
+              </>
+            ) : (
+              <>
+                <UserSearch className="h-4 w-4 mr-1" />
+                Buscar Decisores {selected.size > 0 ? `(${selected.size})` : ""}
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>

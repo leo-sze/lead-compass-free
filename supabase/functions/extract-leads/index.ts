@@ -287,7 +287,7 @@ Deno.serve(async (req) => {
 
     // Deduplicate and parse
     const seen = new Set<string>();
-    const leads = allResults
+    let leads = allResults
       .map((r) => source === "linkedin" ? parseLinkedInResult(r) : parseGoogleMapsResult(r))
       .filter((lead) => {
         const key = `${lead.nome_empresa.toLowerCase()}_${lead.telefone || ""}`;
@@ -295,6 +295,16 @@ Deno.serve(async (req) => {
         seen.add(key);
         return true;
       });
+
+    // Lookup CNPJ + decisor via Firecrawl + AI before returning
+    const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+    if (FIRECRAWL_API_KEY && LOVABLE_API_KEY) {
+      console.log(`Looking up CNPJ for ${leads.length} leads...`);
+      leads = await lookupCnpjBatch(leads, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
+      console.log("CNPJ lookup complete");
+    }
 
     return new Response(
       JSON.stringify({ leads, total: leads.length }),

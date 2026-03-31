@@ -125,30 +125,40 @@ Deno.serve(async (req) => {
     const maxPages = 4;
 
     if (source === "linkedin") {
-      // Build focused LinkedIn search queries
-      // Use the business term + city together to keep results relevant
+      const queryLower = query.toLowerCase();
+      // Use intitle to force term in page title; separate queries for companies vs people
       const searchQueries = [
-        `site:linkedin.com/company "${query}" "${location}"`,
-        `site:linkedin.com/in "${query}" "${location}"`,
-        `site:linkedin.com "${query}" "${location}"`,
+        `site:linkedin.com/company intitle:"${query}" "${location}"`,
+        `site:linkedin.com/in "${query}" "${location}" (proprietário OR dono OR CEO OR fundador OR diretor OR sócio OR owner OR founder)`,
       ];
 
       for (const searchQuery of searchQueries) {
         if (provider === "serpapi") {
           for (let page = 0; page < maxPages; page++) {
             const start = page * 10;
-            console.log(`SerpApi LinkedIn page ${page + 1}, start=${start}`);
+            console.log(`SerpApi LinkedIn page ${page + 1}, start=${start}, q=${searchQuery}`);
             const results = await fetchSerpApi(searchQuery, apiKey, start, "google");
             if (results.length === 0) break;
-            allResults.push(...results);
+            // Post-filter: title or snippet must mention the search term
+            const filtered = results.filter((r: any) => {
+              const t = (r.title || "").toLowerCase();
+              const s = (r.snippet || "").toLowerCase();
+              return t.includes(queryLower) || s.includes(queryLower);
+            });
+            allResults.push(...filtered);
             if (allResults.length >= targetCount) break;
           }
         } else {
           for (let page = 1; page <= maxPages; page++) {
-            console.log(`SearchApi LinkedIn page ${page}`);
+            console.log(`SearchApi LinkedIn page ${page}, q=${searchQuery}`);
             const results = await fetchSearchApi(searchQuery, apiKey, page, "google");
             if (results.length === 0) break;
-            allResults.push(...results);
+            const filtered = results.filter((r: any) => {
+              const t = (r.title || "").toLowerCase();
+              const s = (r.snippet || "").toLowerCase();
+              return t.includes(queryLower) || s.includes(queryLower);
+            });
+            allResults.push(...filtered);
             if (allResults.length >= targetCount) break;
           }
         }

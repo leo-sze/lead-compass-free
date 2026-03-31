@@ -1,0 +1,1 @@
+ALTER TABLE public.leads ADD COLUMN nome_decisor text;

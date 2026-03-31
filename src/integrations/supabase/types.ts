@@ -21,6 +21,7 @@ export type Database = {
           id: string
           instagram: string | null
           linkedin: string | null
+          nome_decisor: string | null
           nome_empresa: string
           query_origem: string | null
           site: string | null
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           instagram?: string | null
           linkedin?: string | null
+          nome_decisor?: string | null
           nome_empresa: string
           query_origem?: string | null
           site?: string | null
@@ -43,6 +45,7 @@ export type Database = {
           id?: string
           instagram?: string | null
           linkedin?: string | null
+          nome_decisor?: string | null
           nome_empresa?: string
           query_origem?: string | null
           site?: string | null

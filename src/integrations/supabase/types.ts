@@ -16,8 +16,10 @@ export type Database = {
     Tables: {
       leads: {
         Row: {
+          cidade: string | null
           created_at: string
           endereco: string | null
+          fonte: string | null
           id: string
           instagram: string | null
           linkedin: string | null
@@ -26,10 +28,13 @@ export type Database = {
           query_origem: string | null
           site: string | null
           telefone: string | null
+          termo_pesquisa: string | null
         }
         Insert: {
+          cidade?: string | null
           created_at?: string
           endereco?: string | null
+          fonte?: string | null
           id?: string
           instagram?: string | null
           linkedin?: string | null
@@ -38,10 +43,13 @@ export type Database = {
           query_origem?: string | null
           site?: string | null
           telefone?: string | null
+          termo_pesquisa?: string | null
         }
         Update: {
+          cidade?: string | null
           created_at?: string
           endereco?: string | null
+          fonte?: string | null
           id?: string
           instagram?: string | null
           linkedin?: string | null
@@ -50,6 +58,7 @@ export type Database = {
           query_origem?: string | null
           site?: string | null
           telefone?: string | null
+          termo_pesquisa?: string | null
         }
         Relationships: []
       }

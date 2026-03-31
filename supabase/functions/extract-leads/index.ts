@@ -125,10 +125,12 @@ Deno.serve(async (req) => {
     const maxPages = 4;
 
     if (source === "linkedin") {
-      // Search for people profiles on LinkedIn with business roles
+      // Build focused LinkedIn search queries
+      // Use the business term + city together to keep results relevant
       const searchQueries = [
-        `site:linkedin.com/in "${query}" "${location}" CEO OR fundador OR proprietário OR diretor OR sócio`,
         `site:linkedin.com/company "${query}" "${location}"`,
+        `site:linkedin.com/in "${query}" "${location}"`,
+        `site:linkedin.com "${query}" "${location}"`,
       ];
 
       for (const searchQuery of searchQueries) {

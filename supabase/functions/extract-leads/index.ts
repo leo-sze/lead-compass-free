@@ -11,6 +11,39 @@ const BodySchema = z.object({
   provider: z.enum(["serpapi", "searchapi"]),
 });
 
+async function fetchSerpApi(searchQuery: string, apiKey: string, start: number): Promise<any[]> {
+  const url = new URL("https://serpapi.com/search.json");
+  url.searchParams.set("engine", "google_maps");
+  url.searchParams.set("q", searchQuery);
+  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("hl", "pt-br");
+  url.searchParams.set("start", String(start));
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`SerpApi error [${res.status}]: ${errBody}`);
+  }
+  const data = await res.json();
+  return data.local_results || [];
+}
+
+async function fetchSearchApi(searchQuery: string, apiKey: string, page: number): Promise<any[]> {
+  const url = new URL("https://www.searchapi.io/api/v1/search");
+  url.searchParams.set("engine", "google_maps");
+  url.searchParams.set("q", searchQuery);
+  url.searchParams.set("api_key", apiKey);
+  url.searchParams.set("page", String(page));
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    const errBody = await res.text();
+    throw new Error(`SearchApi error [${res.status}]: ${errBody}`);
+  }
+  const data = await res.json();
+  return data.local_results || [];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -28,38 +61,41 @@ Deno.serve(async (req) => {
     const { query, location, apiKey, provider } = parsed.data;
     const searchQuery = `${query} em ${location}`;
 
-    let results: any[] = [];
+    const allResults: any[] = [];
+    const targetCount = 60;
+    const maxPages = 4; // Safety limit to avoid burning API credits
 
     if (provider === "serpapi") {
-      const url = new URL("https://serpapi.com/search.json");
-      url.searchParams.set("engine", "google_maps");
-      url.searchParams.set("q", searchQuery);
-      url.searchParams.set("api_key", apiKey);
-      url.searchParams.set("hl", "pt-br");
-
-      const res = await fetch(url.toString());
-      if (!res.ok) {
-        const errBody = await res.text();
-        throw new Error(`SerpApi error [${res.status}]: ${errBody}`);
+      // SerpApi uses 'start' parameter (0, 20, 40, 60...)
+      for (let page = 0; page < maxPages; page++) {
+        const start = page * 20;
+        console.log(`SerpApi page ${page + 1}, start=${start}`);
+        const results = await fetchSerpApi(searchQuery, apiKey, start);
+        if (results.length === 0) break;
+        allResults.push(...results);
+        if (allResults.length >= targetCount) break;
       }
-      const data = await res.json();
-      results = data.local_results || [];
     } else {
-      const url = new URL("https://www.searchapi.io/api/v1/search");
-      url.searchParams.set("engine", "google_maps");
-      url.searchParams.set("q", searchQuery);
-      url.searchParams.set("api_key", apiKey);
-
-      const res = await fetch(url.toString());
-      if (!res.ok) {
-        const errBody = await res.text();
-        throw new Error(`SearchApi error [${res.status}]: ${errBody}`);
+      // SearchApi uses 'page' parameter (1, 2, 3...)
+      for (let page = 1; page <= maxPages; page++) {
+        console.log(`SearchApi page ${page}`);
+        const results = await fetchSearchApi(searchQuery, apiKey, page);
+        if (results.length === 0) break;
+        allResults.push(...results);
+        if (allResults.length >= targetCount) break;
       }
-      const data = await res.json();
-      results = data.local_results || [];
     }
 
-    const leads = results.map((r: any) => ({
+    // Deduplicate by title+phone
+    const seen = new Set<string>();
+    const uniqueResults = allResults.filter((r: any) => {
+      const key = `${(r.title || r.name || "").toLowerCase()}_${r.phone || ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const leads = uniqueResults.map((r: any) => ({
       nome_empresa: r.title || r.name || "Sem nome",
       telefone: r.phone || null,
       site: r.website || r.link || null,
@@ -83,13 +119,11 @@ Deno.serve(async (req) => {
 });
 
 function extractSocialLink(result: any, platform: string): string | null {
-  // Check in links array if available
   if (result.links) {
     for (const link of result.links) {
       if (link.link?.includes(platform)) return link.link;
     }
   }
-  // Check website
   if (result.website?.includes(platform)) return result.website;
   return null;
 }

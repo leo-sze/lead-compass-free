@@ -12,6 +12,54 @@ const BodySchema = z.object({
   linkedin: z.string().nullable().optional(),
 });
 
+async function scrapeUrl(url: string, apiKey: string): Promise<string> {
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const md = data.data?.markdown || data.markdown || "";
+      return md.slice(0, 3000);
+    }
+  } catch (e) {
+    console.error(`Scrape error ${url}:`, e);
+  }
+  return "";
+}
+
+async function searchWeb(query: string, apiKey: string): Promise<string> {
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/search", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        limit: 5,
+        scrapeOptions: { formats: ["markdown"] },
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const results = data.data || [];
+      return results
+        .map((r: any) => `--- ${r.url} ---\n${(r.markdown || r.description || "").slice(0, 2000)}`)
+        .join("\n\n");
+    }
+  } catch (e) {
+    console.error(`Search error:`, e);
+  }
+  return "";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -44,47 +92,48 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Scrape available URLs
-    const urlsToScrape: string[] = [];
-    if (site) urlsToScrape.push(site);
-    if (instagram) urlsToScrape.push(instagram);
-    if (linkedin) urlsToScrape.push(linkedin);
+    // 1. Scrape direct URLs (site, instagram, linkedin) in parallel
+    const scrapePromises: Promise<string>[] = [];
+    const scrapeLabels: string[] = [];
+
+    if (site) {
+      scrapePromises.push(scrapeUrl(site, FIRECRAWL_API_KEY));
+      scrapeLabels.push(site);
+    }
+    if (instagram) {
+      scrapePromises.push(scrapeUrl(instagram, FIRECRAWL_API_KEY));
+      scrapeLabels.push(instagram);
+    }
+    if (linkedin) {
+      scrapePromises.push(scrapeUrl(linkedin, FIRECRAWL_API_KEY));
+      scrapeLabels.push(linkedin);
+    }
+
+    // 2. Web searches for decision maker on LinkedIn and general web
+    scrapePromises.push(
+      searchWeb(`"${nome_empresa}" CEO OR fundador OR proprietário OR diretor site:linkedin.com`, FIRECRAWL_API_KEY)
+    );
+    scrapeLabels.push("LinkedIn Search");
+
+    scrapePromises.push(
+      searchWeb(`"${nome_empresa}" CEO OR fundador OR sócio OR proprietário OR diretor Brasil`, FIRECRAWL_API_KEY)
+    );
+    scrapeLabels.push("Web Search");
+
+    const scrapeResults = await Promise.all(scrapePromises);
 
     let scrapedContent = "";
-
-    for (const url of urlsToScrape) {
-      try {
-        const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${FIRECRAWL_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            url,
-            formats: ["markdown"],
-            onlyMainContent: true,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const markdown = data.data?.markdown || data.markdown || "";
-          if (markdown) {
-            scrapedContent += `\n\n--- Conteúdo de ${url} ---\n${markdown.slice(0, 3000)}`;
-          }
-        }
-      } catch (e) {
-        console.error(`Error scraping ${url}:`, e);
+    for (let i = 0; i < scrapeResults.length; i++) {
+      if (scrapeResults[i]) {
+        scrapedContent += `\n\n=== Fonte: ${scrapeLabels[i]} ===\n${scrapeResults[i]}`;
       }
     }
 
     if (!scrapedContent.trim()) {
-      // Fallback: use AI to search based on company name
-      scrapedContent = `Empresa: ${nome_empresa}. Nenhum conteúdo encontrado nos links disponíveis.`;
+      scrapedContent = `Empresa: ${nome_empresa}. Nenhum conteúdo encontrado.`;
     }
 
-    // Use AI to extract decision maker name
+    // 3. AI extraction
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -107,7 +156,7 @@ REGRAS ESTRITAS:
           },
           {
             role: "user",
-            content: `Empresa: "${nome_empresa}"\n\nConteúdo extraído dos canais da empresa:\n${scrapedContent}\n\nCom base APENAS no conteúdo acima, qual o nome do decisor?`
+            content: `Empresa: "${nome_empresa}"\n\nConteúdo extraído de múltiplas fontes (site, LinkedIn, Instagram, busca web):\n${scrapedContent.slice(0, 12000)}\n\nCom base APENAS no conteúdo acima, qual o nome do decisor?`
           }
         ],
         tools: [
@@ -173,7 +222,6 @@ REGRAS ESTRITAS:
         cargo = args.cargo || "";
       }
     } catch {
-      // Fallback: try content
       const content = aiData.choices?.[0]?.message?.content;
       if (content && content !== "Não identificado") {
         nome_decisor = content.trim();

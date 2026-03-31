@@ -4,6 +4,104 @@ const corsHeaders = {
 };
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
+async function searchFirecrawl(query: string, apiKey: string, limit = 3): Promise<string> {
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/search", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query, limit, scrapeOptions: { formats: ["markdown"] } }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return (data.data || [])
+        .map((r: any) => `${r.title || ""}\n${(r.markdown || r.description || "").slice(0, 1500)}`)
+        .join("\n---\n");
+    }
+  } catch (e) { console.error("Firecrawl search error:", e); }
+  return "";
+}
+
+async function lookupCnpjBatch(leads: any[], firecrawlKey: string, lovableKey: string): Promise<any[]> {
+  const BATCH_SIZE = 5;
+  const results = [...leads];
+
+  for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+    const batch = leads.slice(i, i + BATCH_SIZE);
+    const searches = await Promise.all(
+      batch.map((lead) =>
+        searchFirecrawl(
+          `"${lead.nome_empresa}" CNPJ sócio OR proprietário OR quadro societário`,
+          firecrawlKey,
+          3
+        )
+      )
+    );
+
+    // Use AI to extract CNPJ + decisor from search results
+    const extractionPromises = batch.map(async (lead, idx) => {
+      const content = searches[idx];
+      if (!content.trim()) return { cnpj: null, nome_decisor: lead.nome_decisor, cidade: null };
+
+      try {
+        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-lite",
+            messages: [
+              { role: "system", content: "Extraia CNPJ, nome do decisor principal (sócio/proprietário/diretor) e cidade da empresa. Retorne null se não encontrar. NUNCA invente dados." },
+              { role: "user", content: `Empresa: "${lead.nome_empresa}"\n\nConteúdo:\n${content.slice(0, 4000)}` },
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "extract_cnpj",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    cnpj: { type: "string", description: "CNPJ no formato XX.XXX.XXX/XXXX-XX" },
+                    nome_decisor: { type: "string", description: "Nome do sócio/proprietário/diretor" },
+                    cidade: { type: "string", description: "Cidade da empresa" },
+                  },
+                  required: ["cnpj", "nome_decisor", "cidade"],
+                },
+              },
+            }],
+            tool_choice: { type: "function", function: { name: "extract_cnpj" } },
+          }),
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+          if (toolCall) {
+            const args = JSON.parse(toolCall.function.arguments);
+            return {
+              cnpj: args.cnpj && args.cnpj !== "null" ? args.cnpj.trim() : null,
+              nome_decisor: args.nome_decisor && args.nome_decisor !== "null" ? args.nome_decisor.trim() : lead.nome_decisor,
+              cidade: args.cidade && args.cidade !== "null" ? args.cidade.trim() : null,
+            };
+          }
+        }
+      } catch (e) { console.error("AI extract error:", e); }
+      return { cnpj: null, nome_decisor: lead.nome_decisor, cidade: null };
+    });
+
+    const extracted = await Promise.all(extractionPromises);
+    for (let j = 0; j < batch.length; j++) {
+      const idx = i + j;
+      results[idx] = {
+        ...results[idx],
+        cnpj: extracted[j].cnpj || results[idx].cnpj || null,
+        nome_decisor: extracted[j].nome_decisor || results[idx].nome_decisor,
+        cidade: extracted[j].cidade || results[idx].cidade || null,
+      };
+    }
+  }
+
+  return results;
+}
+
 const BodySchema = z.object({
   query: z.string().min(1).max(200),
   location: z.string().min(1).max(200),

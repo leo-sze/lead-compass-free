@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
     if (!linkedin) missingFields.push("linkedin");
     if (!endereco) missingFields.push("endereco");
     if (!nome_decisor || nome_decisor === "Não identificado") missingFields.push("nome_decisor");
+    if (!cidade) missingFields.push("cidade");
 
     if (missingFields.length === 0) {
       return new Response(

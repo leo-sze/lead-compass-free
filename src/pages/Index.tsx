@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, MapPin, Zap, Loader2 } from "lucide-react";
+import { Search, MapPin, Zap, Loader2, Globe, Linkedin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +8,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 
+type SearchSource = "google" | "linkedin";
+
 const Index = () => {
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
+  const [source, setSource] = useState<SearchSource>("google");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
@@ -23,7 +26,6 @@ const Index = () => {
       return;
     }
 
-    // Check if API key is configured
     const { data: apiKeyData } = await supabase
       .from("settings")
       .select("value")
@@ -51,7 +53,7 @@ const Index = () => {
 
     try {
       setProgress(30);
-      setStatusText("Consultando API de busca...");
+      setStatusText(`Consultando ${source === "google" ? "Google Maps" : "LinkedIn"}...`);
 
       const { data, error } = await supabase.functions.invoke("extract-leads", {
         body: {
@@ -59,6 +61,7 @@ const Index = () => {
           location: location.trim(),
           apiKey: apiKeyData.value,
           provider: providerData?.value || "serpapi",
+          source,
         },
       });
 
@@ -81,6 +84,9 @@ const Index = () => {
             instagram: lead.instagram || null,
             linkedin: lead.linkedin || null,
             query_origem: `${query} - ${location}`,
+            termo_pesquisa: query.trim(),
+            cidade: location.trim(),
+            fonte: source,
           },
           { onConflict: "nome_empresa,telefone" }
         );
@@ -136,12 +142,41 @@ const Index = () => {
           <CardTitle className="text-lg">Nova Extração</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Source Toggle */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Fonte de pesquisa</label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={source === "google" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSource("google")}
+                disabled={loading}
+                className={source === "google" ? "bg-primary" : "border-border/50"}
+              >
+                <Globe className="h-4 w-4 mr-1" />
+                Google Maps
+              </Button>
+              <Button
+                type="button"
+                variant={source === "linkedin" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setSource("linkedin")}
+                disabled={loading}
+                className={source === "linkedin" ? "bg-primary" : "border-border/50"}
+              >
+                <Linkedin className="h-4 w-4 mr-1" />
+                LinkedIn
+              </Button>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">O que você busca?</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Ex: Restaurantes, Clínicas, Academias..."
+                placeholder={source === "google" ? "Ex: Restaurantes, Clínicas, Academias..." : "Ex: CEO de agências de marketing..."}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className="pl-10 bg-secondary/50 border-border/50"

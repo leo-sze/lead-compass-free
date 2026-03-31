@@ -12,7 +12,11 @@ import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 
-type Lead = Tables<"leads">;
+type Lead = Tables<"leads"> & {
+  termo_pesquisa?: string | null;
+  cidade?: string | null;
+  fonte?: string | null;
+};
 
 const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -37,7 +41,7 @@ const Leads = () => {
 
   const fetchLeads = async () => {
     const { data } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
-    if (data) setLeads(data);
+    if (data) setLeads(data as Lead[]);
   };
 
   const fetchTemplate = async () => {

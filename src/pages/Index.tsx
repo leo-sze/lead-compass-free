@@ -75,8 +75,7 @@ const Index = () => {
       let dupCount = 0;
 
       for (const lead of leads) {
-        const { error: insertError } = await supabase.from("leads").upsert(
-          {
+        const upsertData: any = {
             nome_empresa: lead.nome_empresa,
             telefone: lead.telefone || null,
             site: lead.site || null,
@@ -87,7 +86,15 @@ const Index = () => {
             termo_pesquisa: query.trim(),
             cidade: location.trim(),
             fonte: source,
-          },
+          };
+
+        // LinkedIn results include decision maker name
+        if (lead.nome_decisor) {
+          upsertData.nome_decisor = lead.nome_decisor;
+        }
+
+        const { error: insertError } = await supabase.from("leads").upsert(
+          upsertData,
           { onConflict: "nome_empresa,telefone" }
         );
 

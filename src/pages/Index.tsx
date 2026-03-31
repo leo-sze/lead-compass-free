@@ -82,8 +82,10 @@ const Index = () => {
             endereco: lead.endereco || null,
             instagram: lead.instagram || null,
             linkedin: lead.linkedin || null,
+            cnpj: lead.cnpj || null,
             query_origem: `${query} - ${location}`,
             termo_pesquisa: query.trim(),
+            cidade: lead.cidade || null,
             fonte: source,
           };
 

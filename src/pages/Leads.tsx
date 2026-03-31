@@ -231,8 +231,8 @@ const Leads = () => {
               </>
             ) : (
               <>
-                <UserSearch className="h-4 w-4 mr-1" />
-                Buscar Decisores {selected.size > 0 ? `(${selected.size})` : ""}
+                <Sparkles className="h-4 w-4 mr-1" />
+                Enrich List {selected.size > 0 ? `(${selected.size})` : `(${filtered.length})`}
               </>
             )}
           </Button>

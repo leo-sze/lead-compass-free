@@ -6,9 +6,12 @@ import { Label } from "@/components/ui/label";
 interface LeadFiltersProps {
   filter: string;
   onFilterChange: (value: string) => void;
-  origins: string[];
-  selectedOrigin: string;
-  onOriginChange: (value: string) => void;
+  termos: string[];
+  selectedTermo: string;
+  onTermoChange: (value: string) => void;
+  cidades: string[];
+  selectedCidade: string;
+  onCidadeChange: (value: string) => void;
   hasPhone: boolean;
   onHasPhoneChange: (value: boolean) => void;
   hasSite: boolean;
@@ -19,7 +22,8 @@ interface LeadFiltersProps {
 
 const LeadFilters = ({
   filter, onFilterChange,
-  origins, selectedOrigin, onOriginChange,
+  termos, selectedTermo, onTermoChange,
+  cidades, selectedCidade, onCidadeChange,
   hasPhone, onHasPhoneChange,
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
@@ -27,25 +31,39 @@ const LeadFilters = ({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-[200px] max-w-md">
+        <div className="flex-1 min-w-[200px] max-w-sm">
           <Label className="text-xs text-muted-foreground mb-1">Busca</Label>
           <Input
-            placeholder="Filtrar por nome, origem ou endereço..."
+            placeholder="Filtrar por nome ou endereço..."
             value={filter}
             onChange={(e) => onFilterChange(e.target.value)}
             className="bg-secondary/50"
           />
         </div>
         <div className="min-w-[180px]">
-          <Label className="text-xs text-muted-foreground mb-1">Origem</Label>
-          <Select value={selectedOrigin} onValueChange={onOriginChange}>
+          <Label className="text-xs text-muted-foreground mb-1">Termo de pesquisa</Label>
+          <Select value={selectedTermo} onValueChange={onTermoChange}>
             <SelectTrigger className="bg-secondary/50">
-              <SelectValue placeholder="Todas as origens" />
+              <SelectValue placeholder="Todos os termos" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas as origens</SelectItem>
-              {origins.map((o) => (
-                <SelectItem key={o} value={o}>{o}</SelectItem>
+              <SelectItem value="all">Todos os termos</SelectItem>
+              {termos.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-[180px]">
+          <Label className="text-xs text-muted-foreground mb-1">Cidade</Label>
+          <Select value={selectedCidade} onValueChange={onCidadeChange}>
+            <SelectTrigger className="bg-secondary/50">
+              <SelectValue placeholder="Todas as cidades" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as cidades</SelectItem>
+              {cidades.map((c) => (
+                <SelectItem key={c} value={c}>{c}</SelectItem>
               ))}
             </SelectContent>
           </Select>

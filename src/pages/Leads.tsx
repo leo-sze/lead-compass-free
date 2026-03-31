@@ -18,7 +18,8 @@ const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
-  const [selectedOrigin, setSelectedOrigin] = useState("all");
+  const [selectedTermo, setSelectedTermo] = useState("all");
+  const [selectedCidade, setSelectedCidade] = useState("all");
   const [hasPhone, setHasPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
@@ -44,8 +45,13 @@ const Leads = () => {
     if (data?.value) setWhatsappTemplate(data.value);
   };
 
-  const origins = useMemo(() => {
-    const set = new Set(leads.map((l) => l.query_origem).filter(Boolean) as string[]);
+  const termos = useMemo(() => {
+    const set = new Set(leads.map((l) => l.termo_pesquisa).filter(Boolean) as string[]);
+    return Array.from(set).sort();
+  }, [leads]);
+
+  const cidades = useMemo(() => {
+    const set = new Set(leads.map((l) => l.cidade).filter(Boolean) as string[]);
     return Array.from(set).sort();
   }, [leads]);
 
@@ -56,18 +62,20 @@ const Leads = () => {
       result = result.filter(
         (l) =>
           l.nome_empresa.toLowerCase().includes(f) ||
-          l.query_origem?.toLowerCase().includes(f) ||
           l.endereco?.toLowerCase().includes(f)
       );
     }
-    if (selectedOrigin !== "all") {
-      result = result.filter((l) => l.query_origem === selectedOrigin);
+    if (selectedTermo !== "all") {
+      result = result.filter((l) => l.termo_pesquisa === selectedTermo);
+    }
+    if (selectedCidade !== "all") {
+      result = result.filter((l) => l.cidade === selectedCidade);
     }
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     return result;
-  }, [leads, filter, selectedOrigin, hasPhone, hasSite, hasInstagram]);
+  }, [leads, filter, selectedTermo, selectedCidade, hasPhone, hasSite, hasInstagram]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -105,10 +113,10 @@ const Leads = () => {
 
   const exportCSV = () => {
     const toExport = selected.size > 0 ? selectedLeads : leads;
-    const headers = ["Nome", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Origem"];
+    const headers = ["Nome", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
     const rows = toExport.map((l) => [
       l.nome_empresa, l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
-      l.instagram || "", l.linkedin || "", l.query_origem || "",
+      l.instagram || "", l.linkedin || "", l.termo_pesquisa || "", l.cidade || "", l.fonte || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -166,7 +174,6 @@ const Leads = () => {
         failed++;
       }
 
-      // Small delay to avoid rate limits
       await new Promise((r) => setTimeout(r, 1500));
     }
 
@@ -224,9 +231,12 @@ const Leads = () => {
       <LeadFilters
         filter={filter}
         onFilterChange={setFilter}
-        origins={origins}
-        selectedOrigin={selectedOrigin}
-        onOriginChange={setSelectedOrigin}
+        termos={termos}
+        selectedTermo={selectedTermo}
+        onTermoChange={setSelectedTermo}
+        cidades={cidades}
+        selectedCidade={selectedCidade}
+        onCidadeChange={setSelectedCidade}
         hasPhone={hasPhone}
         onHasPhoneChange={setHasPhone}
         hasSite={hasSite}
@@ -252,7 +262,7 @@ const Leads = () => {
                 <TableHead>Site</TableHead>
                 <TableHead>Endereço</TableHead>
                 <TableHead>Redes</TableHead>
-                <TableHead>Origem</TableHead>
+                <TableHead>Cidade</TableHead>
                 <TableHead className="w-20">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -298,7 +308,7 @@ const Leads = () => {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{lead.query_origem || "—"}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{lead.cidade || "—"}</TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"

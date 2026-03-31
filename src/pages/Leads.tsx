@@ -190,7 +190,7 @@ const Leads = () => {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>

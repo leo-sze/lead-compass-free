@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,6 +25,8 @@ const Leads = () => {
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );
+  const [enriching, setEnriching] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState("");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -128,6 +130,54 @@ const Leads = () => {
     toast({ title: `${ids.length} leads removidos` });
   };
 
+  const enrichLeads = useCallback(async () => {
+    const toEnrich = selected.size > 0 ? selectedLeads : filtered;
+    if (toEnrich.length === 0) return;
+
+    setEnriching(true);
+    let enriched = 0;
+    let failed = 0;
+
+    for (const lead of toEnrich) {
+      setEnrichProgress(`${enriched + failed + 1}/${toEnrich.length} — ${lead.nome_empresa}`);
+      try {
+        const { data, error } = await supabase.functions.invoke("enrich-lead", {
+          body: {
+            nome_empresa: lead.nome_empresa,
+            site: lead.site,
+            instagram: lead.instagram,
+            linkedin: lead.linkedin,
+          },
+        });
+
+        if (error) throw error;
+
+        if (data?.nome_decisor && data.nome_decisor !== "Não identificado") {
+          await supabase.from("leads").update({ nome_decisor: data.nome_decisor }).eq("id", lead.id);
+          setLeads((prev) =>
+            prev.map((l) => (l.id === lead.id ? { ...l, nome_decisor: data.nome_decisor } : l))
+          );
+          enriched++;
+        } else {
+          failed++;
+        }
+      } catch (e) {
+        console.error("Enrich error:", e);
+        failed++;
+      }
+
+      // Small delay to avoid rate limits
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    setEnriching(false);
+    setEnrichProgress("");
+    toast({
+      title: "Enriquecimento concluído",
+      description: `${enriched} decisores encontrados, ${failed} não identificados.`,
+    });
+  }, [selected, selectedLeads, filtered, toast]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -146,6 +196,25 @@ const Leads = () => {
               </Button>
             </>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={enrichLeads}
+            disabled={enriching}
+            className="border-accent/50 text-accent hover:bg-accent/10"
+          >
+            {enriching ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                {enrichProgress}
+              </>
+            ) : (
+              <>
+                <UserSearch className="h-4 w-4 mr-1" />
+                Buscar Decisores {selected.size > 0 ? `(${selected.size})` : ""}
+              </>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>

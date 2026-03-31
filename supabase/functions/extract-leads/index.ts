@@ -18,11 +18,7 @@ async function fetchSerpApi(query: string, apiKey: string, start: number, engine
   url.searchParams.set("q", query);
   url.searchParams.set("api_key", apiKey);
   url.searchParams.set("hl", "pt-br");
-  if (engine === "google_maps") {
-    url.searchParams.set("start", String(start));
-  } else {
-    url.searchParams.set("start", String(start));
-  }
+  url.searchParams.set("start", String(start));
 
   const res = await fetch(url.toString());
   if (!res.ok) {
@@ -30,12 +26,7 @@ async function fetchSerpApi(query: string, apiKey: string, start: number, engine
     throw new Error(`SerpApi error [${res.status}]: ${errBody}`);
   }
   const data = await res.json();
-
-  if (engine === "google_maps") {
-    return data.local_results || [];
-  }
-  // For Google search (LinkedIn), parse organic results
-  return data.organic_results || [];
+  return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
 }
 
 async function fetchSearchApi(query: string, apiKey: string, page: number, engine: string): Promise<any[]> {
@@ -51,11 +42,7 @@ async function fetchSearchApi(query: string, apiKey: string, page: number, engin
     throw new Error(`SearchApi error [${res.status}]: ${errBody}`);
   }
   const data = await res.json();
-
-  if (engine === "google_maps") {
-    return data.local_results || [];
-  }
-  return data.organic_results || [];
+  return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
 }
 
 function parseGoogleMapsResult(r: any) {
@@ -66,33 +53,54 @@ function parseGoogleMapsResult(r: any) {
     endereco: r.address || null,
     instagram: extractSocialLink(r, "instagram"),
     linkedin: extractSocialLink(r, "linkedin"),
+    nome_decisor: null,
   };
 }
 
 function parseLinkedInResult(r: any) {
-  // Parse LinkedIn search results from Google organic results
   const title = r.title || "";
   const snippet = r.snippet || "";
   const link = r.link || "";
 
-  // Extract company name from title (e.g., "Company Name - CEO | LinkedIn")
-  let nome = title.split(" - ")[0]?.split(" | ")[0]?.trim() || title;
-  // If it looks like a person profile, try to get company from snippet
-  if (link.includes("/in/")) {
-    // This is a person profile, try to extract company
-    const companyMatch = snippet.match(/(?:at|em|na|no)\s+([^.·|]+)/i);
-    nome = companyMatch ? companyMatch[1].trim() : nome;
-  } else if (link.includes("/company/")) {
-    nome = title.replace(/\s*[|\-–].*/g, "").trim();
+  let nome_empresa = "";
+  let nome_decisor: string | null = null;
+
+  if (link.includes("/company/")) {
+    // Company page: extract company name from title
+    nome_empresa = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").replace(/\s*LinkedIn$/i, "").trim();
+  } else if (link.includes("/in/")) {
+    // Person profile: the title IS the person, extract company from snippet
+    nome_decisor = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").replace(/\s*LinkedIn$/i, "").trim();
+    
+    // Try to find company name in snippet
+    const companyPatterns = [
+      /(?:at|em|na|no|@)\s+([^.·|,\-–]+)/i,
+      /(?:CEO|Fundador|Sócio|Diretor|Proprietário|Owner|Founder|Managing)\s+(?:at|em|na|no|de|da|do|@|-|–)\s*([^.·|,]+)/i,
+    ];
+    for (const pattern of companyPatterns) {
+      const match = snippet.match(pattern);
+      if (match) {
+        nome_empresa = match[1].trim();
+        break;
+      }
+    }
+
+    // If no company found, use first meaningful part of snippet
+    if (!nome_empresa) {
+      nome_empresa = snippet.split(/[.·|]/)[0]?.trim() || title;
+    }
+  } else {
+    nome_empresa = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").trim();
   }
 
   return {
-    nome_empresa: nome || "Sem nome",
+    nome_empresa: nome_empresa || "Sem nome",
     telefone: null,
     site: null,
     endereco: null,
     instagram: null,
     linkedin: link.includes("linkedin.com") ? link : null,
+    nome_decisor,
   };
 }
 
@@ -117,29 +125,34 @@ Deno.serve(async (req) => {
     const maxPages = 4;
 
     if (source === "linkedin") {
-      // Search Google for LinkedIn profiles/companies
-      const searchQuery = `site:linkedin.com/company ${query} ${location}`;
+      // Search for people profiles on LinkedIn with business roles
+      const searchQueries = [
+        `site:linkedin.com/in "${query}" "${location}" CEO OR fundador OR proprietário OR diretor OR sócio`,
+        `site:linkedin.com/company "${query}" "${location}"`,
+      ];
 
-      if (provider === "serpapi") {
-        for (let page = 0; page < maxPages; page++) {
-          const start = page * 20;
-          console.log(`SerpApi LinkedIn page ${page + 1}, start=${start}`);
-          const results = await fetchSerpApi(searchQuery, apiKey, start, "google");
-          if (results.length === 0) break;
-          allResults.push(...results);
-          if (allResults.length >= targetCount) break;
+      for (const searchQuery of searchQueries) {
+        if (provider === "serpapi") {
+          for (let page = 0; page < maxPages; page++) {
+            const start = page * 10;
+            console.log(`SerpApi LinkedIn page ${page + 1}, start=${start}`);
+            const results = await fetchSerpApi(searchQuery, apiKey, start, "google");
+            if (results.length === 0) break;
+            allResults.push(...results);
+            if (allResults.length >= targetCount) break;
+          }
+        } else {
+          for (let page = 1; page <= maxPages; page++) {
+            console.log(`SearchApi LinkedIn page ${page}`);
+            const results = await fetchSearchApi(searchQuery, apiKey, page, "google");
+            if (results.length === 0) break;
+            allResults.push(...results);
+            if (allResults.length >= targetCount) break;
+          }
         }
-      } else {
-        for (let page = 1; page <= maxPages; page++) {
-          console.log(`SearchApi LinkedIn page ${page}`);
-          const results = await fetchSearchApi(searchQuery, apiKey, page, "google");
-          if (results.length === 0) break;
-          allResults.push(...results);
-          if (allResults.length >= targetCount) break;
-        }
+        if (allResults.length >= targetCount) break;
       }
     } else {
-      // Google Maps search
       const searchQuery = `${query} em ${location}`;
 
       if (provider === "serpapi") {
@@ -168,7 +181,7 @@ Deno.serve(async (req) => {
       .map((r) => source === "linkedin" ? parseLinkedInResult(r) : parseGoogleMapsResult(r))
       .filter((lead) => {
         const key = `${lead.nome_empresa.toLowerCase()}_${lead.telefone || ""}`;
-        if (seen.has(key)) return false;
+        if (seen.has(key) || lead.nome_empresa === "Sem nome") return false;
         seen.add(key);
         return true;
       });

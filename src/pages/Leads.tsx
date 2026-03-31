@@ -41,7 +41,7 @@ const Leads = () => {
 
   const fetchLeads = async () => {
     const { data } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
-    if (data) setLeads(data);
+    if (data) setLeads(data as Lead[]);
   };
 
   const fetchTemplate = async () => {

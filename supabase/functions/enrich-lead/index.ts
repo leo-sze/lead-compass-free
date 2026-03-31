@@ -10,6 +10,10 @@ const BodySchema = z.object({
   site: z.string().nullable().optional(),
   instagram: z.string().nullable().optional(),
   linkedin: z.string().nullable().optional(),
+  telefone: z.string().nullable().optional(),
+  endereco: z.string().nullable().optional(),
+  nome_decisor: z.string().nullable().optional(),
+  cidade: z.string().nullable().optional(),
 });
 
 async function scrapeUrl(url: string, apiKey: string): Promise<string> {
@@ -74,7 +78,23 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { nome_empresa, site, instagram, linkedin } = parsed.data;
+    const { nome_empresa, site, instagram, linkedin, telefone, endereco, nome_decisor, cidade } = parsed.data;
+
+    // Determine which fields are missing
+    const missingFields: string[] = [];
+    if (!telefone) missingFields.push("telefone");
+    if (!site) missingFields.push("site");
+    if (!instagram) missingFields.push("instagram");
+    if (!linkedin) missingFields.push("linkedin");
+    if (!endereco) missingFields.push("endereco");
+    if (!nome_decisor || nome_decisor === "Não identificado") missingFields.push("nome_decisor");
+
+    if (missingFields.length === 0) {
+      return new Response(
+        JSON.stringify({ message: "All fields already filled", updates: {} }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -92,7 +112,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 1. Scrape direct URLs (site, instagram, linkedin) in parallel
+    // 1. Scrape existing URLs in parallel
     const scrapePromises: Promise<string>[] = [];
     const scrapeLabels: string[] = [];
 
@@ -109,16 +129,17 @@ Deno.serve(async (req) => {
       scrapeLabels.push(linkedin);
     }
 
-    // 2. Web searches for decision maker on LinkedIn and general web
+    // 2. Web search for company info
+    const locationQuery = cidade ? ` "${cidade}"` : "";
     scrapePromises.push(
-      searchWeb(`"${nome_empresa}" CEO OR fundador OR proprietário OR diretor site:linkedin.com`, FIRECRAWL_API_KEY)
+      searchWeb(`"${nome_empresa}"${locationQuery} telefone site instagram contato`, FIRECRAWL_API_KEY)
     );
-    scrapeLabels.push("LinkedIn Search");
+    scrapeLabels.push("Web Search - Contact");
 
     scrapePromises.push(
-      searchWeb(`"${nome_empresa}" CEO OR fundador OR sócio OR proprietário OR diretor Brasil`, FIRECRAWL_API_KEY)
+      searchWeb(`"${nome_empresa}" CEO OR fundador OR proprietário OR diretor OR sócio site:linkedin.com`, FIRECRAWL_API_KEY)
     );
-    scrapeLabels.push("Web Search");
+    scrapeLabels.push("LinkedIn Search");
 
     const scrapeResults = await Promise.all(scrapePromises);
 
@@ -133,7 +154,24 @@ Deno.serve(async (req) => {
       scrapedContent = `Empresa: ${nome_empresa}. Nenhum conteúdo encontrado.`;
     }
 
-    // 3. AI extraction
+    // 3. Build AI extraction for missing fields only
+    const fieldDescriptions: Record<string, string> = {
+      telefone: "Telefone com DDD (formato brasileiro, ex: (54) 99999-1234)",
+      site: "URL do site oficial da empresa (ex: https://empresa.com.br)",
+      instagram: "URL completa do perfil Instagram (ex: https://instagram.com/empresa)",
+      linkedin: "URL completa da página LinkedIn (ex: https://linkedin.com/company/empresa)",
+      endereco: "Endereço físico completo",
+      nome_decisor: "Nome completo do principal decisor (CEO, fundador, sócio, proprietário, diretor)",
+    };
+
+    const properties: Record<string, any> = {};
+    for (const field of missingFields) {
+      properties[field] = {
+        type: "string",
+        description: fieldDescriptions[field] || field,
+      };
+    }
+
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -145,45 +183,50 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Você é um analista que identifica decisores de empresas brasileiras.
-REGRAS ESTRITAS:
-- Analise o conteúdo fornecido e identifique APENAS nomes de pessoas REAIS que aparecem EXPLICITAMENTE no texto.
-- O decisor deve ser alguém com cargo de liderança: CEO, fundador, sócio, proprietário, diretor, gerente geral.
-- NUNCA invente nomes. Se o nome não aparecer claramente no conteúdo, retorne "Não identificado".
+            content: `Você é um analista de dados B2B brasileiro. Extraia APENAS informações que aparecem EXPLICITAMENTE no conteúdo fornecido.
+
+REGRAS:
+- NUNCA invente dados. Se a informação não estiver claramente no texto, use null.
+- Telefones devem estar no formato brasileiro com DDD.
+- URLs devem ser completas (com https://).
+- Para nome_decisor, busque apenas pessoas com cargos de liderança que apareçam LITERALMENTE no texto.
 - NUNCA use o nome da empresa como nome de pessoa.
-- Se houver dúvida, retorne "Não identificado".
-- Retorne SOMENTE nomes que você encontrou LITERALMENTE no texto fornecido.`
+- Se houver dúvida, use null.`
           },
           {
             role: "user",
-            content: `Empresa: "${nome_empresa}"\n\nConteúdo extraído de múltiplas fontes (site, LinkedIn, Instagram, busca web):\n${scrapedContent.slice(0, 12000)}\n\nCom base APENAS no conteúdo acima, qual o nome do decisor?`
+            content: `Empresa: "${nome_empresa}"${cidade ? ` em ${cidade}` : ""}
+
+Dados já conhecidos:
+${telefone ? `- Telefone: ${telefone}` : "- Telefone: FALTANDO"}
+${site ? `- Site: ${site}` : "- Site: FALTANDO"}
+${instagram ? `- Instagram: ${instagram}` : "- Instagram: FALTANDO"}
+${linkedin ? `- LinkedIn: ${linkedin}` : "- LinkedIn: FALTANDO"}
+${endereco ? `- Endereço: ${endereco}` : "- Endereço: FALTANDO"}
+${nome_decisor ? `- Decisor: ${nome_decisor}` : "- Decisor: FALTANDO"}
+
+Conteúdo extraído:
+${scrapedContent.slice(0, 12000)}
+
+Extraia os dados FALTANDO com base no conteúdo acima.`
           }
         ],
         tools: [
           {
             type: "function",
             function: {
-              name: "extract_decisor",
-              description: "Extract the decision maker name from company content",
+              name: "extract_lead_data",
+              description: "Extract missing lead data from scraped content",
               parameters: {
                 type: "object",
-                properties: {
-                  nome_decisor: {
-                    type: "string",
-                    description: "Full name of the decision maker (CEO, owner, founder, director)"
-                  },
-                  cargo: {
-                    type: "string",
-                    description: "Role/position of the decision maker"
-                  }
-                },
-                required: ["nome_decisor"],
-                additionalProperties: false
+                properties,
+                required: missingFields,
+                additionalProperties: false,
               }
             }
           }
         ],
-        tool_choice: { type: "function", function: { name: "extract_decisor" } }
+        tool_choice: { type: "function", function: { name: "extract_lead_data" } }
       }),
     });
 
@@ -211,25 +254,30 @@ REGRAS ESTRITAS:
     }
 
     const aiData = await aiResponse.json();
-    let nome_decisor = "Não identificado";
-    let cargo = "";
+    const updates: Record<string, string | null> = {};
 
     try {
       const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
       if (toolCall) {
         const args = JSON.parse(toolCall.function.arguments);
-        nome_decisor = args.nome_decisor || "Não identificado";
-        cargo = args.cargo || "";
+        for (const field of missingFields) {
+          const val = args[field];
+          if (val && val !== "null" && val !== "Não identificado" && val !== "N/A" && val !== "não encontrado" && val.trim() !== "") {
+            updates[field] = val.trim();
+          }
+        }
       }
     } catch {
-      const content = aiData.choices?.[0]?.message?.content;
-      if (content && content !== "Não identificado") {
-        nome_decisor = content.trim();
-      }
+      console.error("Failed to parse AI response");
     }
 
+    // Backward compatibility: also return nome_decisor at top level
     return new Response(
-      JSON.stringify({ nome_decisor, cargo }),
+      JSON.stringify({
+        nome_decisor: updates.nome_decisor || nome_decisor || "Não identificado",
+        cargo: "",
+        updates,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {

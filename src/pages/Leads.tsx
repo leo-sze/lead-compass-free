@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Download, MessageCircle, Trash2, ExternalLink, Instagram } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -10,6 +9,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
+import LeadFilters from "@/components/leads/LeadFilters";
+import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 
 type Lead = Tables<"leads">;
 
@@ -17,6 +18,10 @@ const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState("");
+  const [selectedOrigin, setSelectedOrigin] = useState("all");
+  const [hasPhone, setHasPhone] = useState(false);
+  const [hasSite, setHasSite] = useState(false);
+  const [hasInstagram, setHasInstagram] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );
@@ -37,16 +42,35 @@ const Leads = () => {
     if (data?.value) setWhatsappTemplate(data.value);
   };
 
+  const origins = useMemo(() => {
+    const set = new Set(leads.map((l) => l.query_origem).filter(Boolean) as string[]);
+    return Array.from(set).sort();
+  }, [leads]);
+
   const filtered = useMemo(() => {
-    if (!filter) return leads;
-    const f = filter.toLowerCase();
-    return leads.filter(
-      (l) =>
-        l.nome_empresa.toLowerCase().includes(f) ||
-        l.query_origem?.toLowerCase().includes(f) ||
-        l.endereco?.toLowerCase().includes(f)
-    );
-  }, [leads, filter]);
+    let result = leads;
+    if (filter) {
+      const f = filter.toLowerCase();
+      result = result.filter(
+        (l) =>
+          l.nome_empresa.toLowerCase().includes(f) ||
+          l.query_origem?.toLowerCase().includes(f) ||
+          l.endereco?.toLowerCase().includes(f)
+      );
+    }
+    if (selectedOrigin !== "all") {
+      result = result.filter((l) => l.query_origem === selectedOrigin);
+    }
+    if (hasPhone) result = result.filter((l) => l.telefone);
+    if (hasSite) result = result.filter((l) => l.site);
+    if (hasInstagram) result = result.filter((l) => l.instagram);
+    return result;
+  }, [leads, filter, selectedOrigin, hasPhone, hasSite, hasInstagram]);
+
+  const selectedLeads = useMemo(
+    () => leads.filter((l) => selected.has(l.id)),
+    [leads, selected]
+  );
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
@@ -78,7 +102,7 @@ const Leads = () => {
   };
 
   const exportCSV = () => {
-    const toExport = selected.size > 0 ? leads.filter((l) => selected.has(l.id)) : leads;
+    const toExport = selected.size > 0 ? selectedLeads : leads;
     const headers = ["Nome", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Origem"];
     const rows = toExport.map((l) => [
       l.nome_empresa, l.telefone || "", l.site || "", l.endereco || "",
@@ -106,16 +130,21 @@ const Leads = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Leads</h1>
-          <p className="text-muted-foreground text-sm">{leads.length} leads no total</p>
+          <p className="text-muted-foreground text-sm">
+            {leads.length} leads no total · {filtered.length} exibidos
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {selected.size > 0 && (
-            <Button variant="destructive" size="sm" onClick={deleteSelected}>
-              <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
-            </Button>
+            <>
+              <BulkWhatsApp leads={selectedLeads} template={whatsappTemplate} />
+              <Button variant="destructive" size="sm" onClick={deleteSelected}>
+                <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
@@ -123,11 +152,18 @@ const Leads = () => {
         </div>
       </div>
 
-      <Input
-        placeholder="Filtrar por nome, origem ou endereço..."
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        className="max-w-md bg-secondary/50"
+      <LeadFilters
+        filter={filter}
+        onFilterChange={setFilter}
+        origins={origins}
+        selectedOrigin={selectedOrigin}
+        onOriginChange={setSelectedOrigin}
+        hasPhone={hasPhone}
+        onHasPhoneChange={setHasPhone}
+        hasSite={hasSite}
+        onHasSiteChange={setHasSite}
+        hasInstagram={hasInstagram}
+        onHasInstagramChange={setHasInstagram}
       />
 
       <Card className="border-border/50 bg-card/80">
@@ -154,7 +190,7 @@ const Leads = () => {
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
-                    Nenhum lead encontrado. Faça uma busca para começar!
+                    Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -170,7 +206,7 @@ const Leads = () => {
                     <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
                     <TableCell>
                       {lead.site ? (
-                        <a href={lead.site} target="_blank" rel="noopener" className="text-accent hover:underline flex items-center gap-1">
+                        <a href={lead.site} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline flex items-center gap-1">
                           <ExternalLink className="h-3 w-3" />
                           <span className="truncate max-w-[120px]">{lead.site.replace(/https?:\/\//, "")}</span>
                         </a>
@@ -180,12 +216,12 @@ const Leads = () => {
                     <TableCell>
                       <div className="flex gap-1">
                         {lead.instagram && (
-                          <a href={lead.instagram} target="_blank" rel="noopener" className="text-pink-400 hover:text-pink-300">
+                          <a href={lead.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300">
                             <Instagram className="h-4 w-4" />
                           </a>
                         )}
                         {lead.linkedin && (
-                          <a href={lead.linkedin} target="_blank" rel="noopener" className="text-blue-400 hover:text-blue-300">
+                          <a href={lead.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
                             <ExternalLink className="h-4 w-4" />
                           </a>
                         )}

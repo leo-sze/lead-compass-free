@@ -88,6 +88,7 @@ Deno.serve(async (req) => {
     if (!linkedin) missingFields.push("linkedin");
     if (!endereco) missingFields.push("endereco");
     if (!nome_decisor || nome_decisor === "Não identificado") missingFields.push("nome_decisor");
+    if (!cidade) missingFields.push("cidade");
 
     if (missingFields.length === 0) {
       return new Response(
@@ -141,6 +142,17 @@ Deno.serve(async (req) => {
     );
     scrapeLabels.push("LinkedIn Search");
 
+    // 3. Econodata and CNPJ lookup for decision makers
+    scrapePromises.push(
+      searchWeb(`"${nome_empresa}"${locationQuery} site:econodata.com.br sócio OR decisor OR proprietário`, FIRECRAWL_API_KEY)
+    );
+    scrapeLabels.push("Econodata Search");
+
+    scrapePromises.push(
+      searchWeb(`"${nome_empresa}"${locationQuery} CNPJ sócio OR quadro societário OR administrador`, FIRECRAWL_API_KEY)
+    );
+    scrapeLabels.push("CNPJ Search");
+
     const scrapeResults = await Promise.all(scrapePromises);
 
     let scrapedContent = "";
@@ -161,7 +173,8 @@ Deno.serve(async (req) => {
       instagram: "URL completa do perfil Instagram (ex: https://instagram.com/empresa)",
       linkedin: "URL completa da página LinkedIn (ex: https://linkedin.com/company/empresa)",
       endereco: "Endereço físico completo",
-      nome_decisor: "Nome completo do principal decisor (CEO, fundador, sócio, proprietário, diretor)",
+      nome_decisor: "Nome completo do principal decisor (CEO, fundador, sócio, proprietário, diretor). Busque no quadro societário, Econodata ou dados de CNPJ.",
+      cidade: "Cidade onde a empresa está localizada, extraída do endereço (ex: Gramado, São Paulo, Curitiba)",
     };
 
     const properties: Record<string, any> = {};

@@ -103,9 +103,9 @@ const Leads = () => {
 
   const exportCSV = () => {
     const toExport = selected.size > 0 ? selectedLeads : leads;
-    const headers = ["Nome", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Origem"];
+    const headers = ["Nome", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Origem"];
     const rows = toExport.map((l) => [
-      l.nome_empresa, l.telefone || "", l.site || "", l.endereco || "",
+      l.nome_empresa, l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
       l.instagram || "", l.linkedin || "", l.query_origem || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -178,6 +178,7 @@ const Leads = () => {
                   />
                 </TableHead>
                 <TableHead>Empresa</TableHead>
+                <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead>Site</TableHead>
                 <TableHead>Endereço</TableHead>
@@ -189,7 +190,7 @@ const Leads = () => {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
@@ -203,6 +204,7 @@ const Leads = () => {
                       />
                     </TableCell>
                     <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
+                    <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
                     <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
                     <TableCell>
                       {lead.site ? (

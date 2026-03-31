@@ -96,14 +96,18 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: "system",
-            content: `Você é um especialista em identificar decisores de empresas. 
-Analise o conteúdo abaixo e extraia o nome do principal decisor (CEO, proprietário, fundador, diretor, sócio ou responsável) da empresa "${nome_empresa}".
-Retorne APENAS o nome completo da pessoa. Se não encontrar, retorne "Não identificado".
-Não adicione explicações, apenas o nome.`
+            content: `Você é um analista que identifica decisores de empresas brasileiras.
+REGRAS ESTRITAS:
+- Analise o conteúdo fornecido e identifique APENAS nomes de pessoas REAIS que aparecem EXPLICITAMENTE no texto.
+- O decisor deve ser alguém com cargo de liderança: CEO, fundador, sócio, proprietário, diretor, gerente geral.
+- NUNCA invente nomes. Se o nome não aparecer claramente no conteúdo, retorne "Não identificado".
+- NUNCA use o nome da empresa como nome de pessoa.
+- Se houver dúvida, retorne "Não identificado".
+- Retorne SOMENTE nomes que você encontrou LITERALMENTE no texto fornecido.`
           },
           {
             role: "user",
-            content: scrapedContent
+            content: `Empresa: "${nome_empresa}"\n\nConteúdo extraído dos canais da empresa:\n${scrapedContent}\n\nCom base APENAS no conteúdo acima, qual o nome do decisor?`
           }
         ],
         tools: [

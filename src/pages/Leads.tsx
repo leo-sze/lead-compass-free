@@ -204,6 +204,7 @@ const Leads = () => {
                       />
                     </TableCell>
                     <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
+                    <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
                     <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
                     <TableCell>
                       {lead.site ? (

@@ -84,7 +84,6 @@ const Index = () => {
             linkedin: lead.linkedin || null,
             query_origem: `${query} - ${location}`,
             termo_pesquisa: query.trim(),
-            cidade: location.trim(),
             fonte: source,
           };
 

@@ -173,7 +173,8 @@ Deno.serve(async (req) => {
       instagram: "URL completa do perfil Instagram (ex: https://instagram.com/empresa)",
       linkedin: "URL completa da página LinkedIn (ex: https://linkedin.com/company/empresa)",
       endereco: "Endereço físico completo",
-      nome_decisor: "Nome completo do principal decisor (CEO, fundador, sócio, proprietário, diretor)",
+      nome_decisor: "Nome completo do principal decisor (CEO, fundador, sócio, proprietário, diretor). Busque no quadro societário, Econodata ou dados de CNPJ.",
+      cidade: "Cidade onde a empresa está localizada, extraída do endereço (ex: Gramado, São Paulo, Curitiba)",
     };
 
     const properties: Record<string, any> = {};

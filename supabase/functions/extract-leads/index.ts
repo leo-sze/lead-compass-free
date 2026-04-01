@@ -106,6 +106,7 @@ const BodySchema = z.object({
   query: z.string().min(1).max(200),
   location: z.string().min(1).max(200),
   setor: z.string().max(200).optional(),
+  keywords: z.string().max(200).optional(),
   apiKey: z.string().min(1),
   provider: z.enum(["serpapi", "searchapi"]),
   source: z.enum(["google", "linkedin"]).default("google"),
@@ -299,7 +300,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { query, location, setor, apiKey, provider, source } = parsed.data;
+    const { query, location, setor, keywords, apiKey, provider, source } = parsed.data;
 
     const allResults: any[] = [];
     const targetCount = 60;
@@ -307,11 +308,12 @@ Deno.serve(async (req) => {
 
     if (source === "linkedin") {
       const queryLower = query.toLowerCase();
-      const setorPart = setor ? ` "${setor}"` : "";
-      // LinkedIn: query = cargo/função, setor = tipo de empresa
+      const industryPart = setor ? ` "${setor}"` : "";
+      const keywordsPart = keywords ? ` ${keywords}` : "";
+      // Build focused LinkedIn queries: Job Title + Industry + Keywords + Location
       const searchQueries = [
-        `site:linkedin.com/in "${query}"${setorPart} "${location}" (proprietário OR dono OR CEO OR fundador OR diretor OR sócio OR owner OR founder)`,
-        `site:linkedin.com/in "${query}"${setorPart} "${location}"`,
+        `site:linkedin.com/in "${query}"${industryPart}${keywordsPart} "${location}"`,
+        `site:linkedin.com/in "${query}"${industryPart} "${location}" (proprietário OR dono OR CEO OR fundador OR diretor OR sócio OR owner OR founder)`,
       ];
 
       for (const searchQuery of searchQueries) {
@@ -374,8 +376,13 @@ Deno.serve(async (req) => {
     let leads = allResults
       .map((r) => source === "linkedin" ? parseLinkedInResult(r) : parseGoogleMapsResult(r))
       .filter((lead) => {
+        // Filter out leads without a real company name
+        if (lead.nome_empresa === "Sem nome") return false;
+        if (source === "linkedin" && lead.nome_empresa.startsWith("[Decisor]")) return false;
+        if (source === "linkedin" && isGenericTerm(lead.nome_empresa)) return false;
+        
         const key = `${lead.nome_empresa.toLowerCase()}_${lead.telefone || ""}`;
-        if (seen.has(key) || lead.nome_empresa === "Sem nome") return false;
+        if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });

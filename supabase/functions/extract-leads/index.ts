@@ -376,8 +376,13 @@ Deno.serve(async (req) => {
     let leads = allResults
       .map((r) => source === "linkedin" ? parseLinkedInResult(r) : parseGoogleMapsResult(r))
       .filter((lead) => {
+        // Filter out leads without a real company name
+        if (lead.nome_empresa === "Sem nome") return false;
+        if (source === "linkedin" && lead.nome_empresa.startsWith("[Decisor]")) return false;
+        if (source === "linkedin" && isGenericTerm(lead.nome_empresa)) return false;
+        
         const key = `${lead.nome_empresa.toLowerCase()}_${lead.telefone || ""}`;
-        if (seen.has(key) || lead.nome_empresa === "Sem nome") return false;
+        if (seen.has(key)) return false;
         seen.add(key);
         return true;
       });

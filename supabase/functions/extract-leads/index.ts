@@ -1,6 +1,8 @@
-const corsHeaders = {
+import { corsHeaders } from 'https://deno.land/x/cors@v1.2.1/mod.ts';
+
+const _corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 

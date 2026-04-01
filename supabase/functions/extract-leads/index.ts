@@ -37,7 +37,6 @@ async function lookupCnpjBatch(leads: any[], firecrawlKey: string, lovableKey: s
       )
     );
 
-    // Use AI to extract CNPJ + decisor from search results
     const extractionPromises = batch.map(async (lead, idx) => {
       const content = searches[idx];
       if (!content.trim()) return { cnpj: null, nome_decisor: lead.nome_decisor, cidade: null };
@@ -102,6 +101,120 @@ async function lookupCnpjBatch(leads: any[], firecrawlKey: string, lovableKey: s
   return results;
 }
 
+// --- AI-powered LinkedIn result parser ---
+
+async function parseLinkedInResultsBatch(
+  rawResults: any[],
+  searchContext: { jobTitle: string; industry: string; location: string; keywords: string },
+  lovableKey: string
+): Promise<any[]> {
+  const BATCH_SIZE = 10;
+  const allParsed: any[] = [];
+
+  for (let i = 0; i < rawResults.length; i += BATCH_SIZE) {
+    const batch = rawResults.slice(i, i + BATCH_SIZE);
+
+    const inputData = batch.map((r, idx) => ({
+      idx,
+      title: (r.title || "").slice(0, 200),
+      snippet: (r.snippet || "").slice(0, 300),
+      link: r.link || "",
+    }));
+
+    try {
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            {
+              role: "system",
+              content: `Você é um extrator de dados de resultados de busca do LinkedIn. Extraia informações estruturadas de cada resultado.
+Contexto da busca: cargo="${searchContext.jobTitle}", setor="${searchContext.industry}", local="${searchContext.location}", palavras-chave="${searchContext.keywords}".
+Regras:
+- nome_decisor: nome completo da pessoa (nunca cargos, descrições ou fragmentos)
+- nome_empresa: empresa onde a pessoa trabalha. DEVE ser um nome real de empresa. Se não conseguir identificar com certeza, retorne null.
+- cargo: cargo/função da pessoa
+- relevante: true SOMENTE se o perfil tem relação real com o cargo/setor/local buscado. false para resultados genéricos ou irrelevantes.
+- NUNCA invente dados. Se não tiver certeza, retorne null.
+- Ignore resultados que são páginas de empresa (/company/) sem pessoa identificável.`
+            },
+            {
+              role: "user",
+              content: JSON.stringify(inputData),
+            },
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "extract_linkedin_leads",
+              description: "Extrai leads estruturados dos resultados do LinkedIn",
+              parameters: {
+                type: "object",
+                properties: {
+                  leads: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        idx: { type: "number", description: "Índice do resultado original" },
+                        nome_decisor: { type: "string", description: "Nome completo da pessoa" },
+                        nome_empresa: { type: "string", description: "Nome da empresa onde trabalha" },
+                        cargo: { type: "string", description: "Cargo/função" },
+                        relevante: { type: "boolean", description: "Se é relevante para a busca" },
+                      },
+                      required: ["idx", "nome_decisor", "nome_empresa", "cargo", "relevante"],
+                    },
+                  },
+                },
+                required: ["leads"],
+              },
+            },
+          }],
+          tool_choice: { type: "function", function: { name: "extract_linkedin_leads" } },
+        }),
+      });
+
+      if (aiRes.ok) {
+        const aiData = await aiRes.json();
+        const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+        if (toolCall) {
+          const args = JSON.parse(toolCall.function.arguments);
+          const extracted = args.leads || [];
+
+          for (const item of extracted) {
+            // Strict validation
+            if (!item.relevante) continue;
+            if (!item.nome_empresa || item.nome_empresa === "null" || item.nome_empresa.length < 3) continue;
+            if (!item.nome_decisor || item.nome_decisor === "null") continue;
+
+            // Find original result for the link
+            const original = batch[item.idx];
+            if (!original) continue;
+
+            allParsed.push({
+              nome_empresa: item.nome_empresa.trim(),
+              telefone: null,
+              site: null,
+              endereco: null,
+              instagram: null,
+              linkedin: original.link?.includes("linkedin.com") ? original.link : null,
+              nome_decisor: item.nome_decisor.trim(),
+            });
+          }
+        }
+      } else {
+        console.error("AI parse LinkedIn error:", aiRes.status, await aiRes.text());
+      }
+    } catch (e) {
+      console.error("AI LinkedIn batch error:", e);
+    }
+  }
+
+  return allParsed;
+}
+
 const BodySchema = z.object({
   query: z.string().min(1).max(200),
   location: z.string().min(1).max(200),
@@ -157,135 +270,6 @@ function parseGoogleMapsResult(r: any) {
   };
 }
 
-function parseLinkedInResult(r: any) {
-  const title = r.title || "";
-  const snippet = r.snippet || "";
-  const link = r.link || "";
-
-  let nome_empresa = "";
-  let nome_decisor: string | null = null;
-
-  if (link.includes("/company/")) {
-    nome_empresa = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").replace(/\s*LinkedIn$/i, "").trim();
-  } else if (link.includes("/in/")) {
-    // LinkedIn person titles follow patterns like:
-    // "Name - Title at Company | LinkedIn"
-    // "Name - Title na Company | LinkedIn"  
-    // "Name | LinkedIn"
-    
-    // Clean the title: remove "| LinkedIn" suffix
-    const cleanTitle = title.replace(/\s*\|?\s*LinkedIn\s*$/i, "").trim();
-    
-    // Try to split "Name - Description"
-    const dashMatch = cleanTitle.match(/^([^|\-–]+?)\s*[\-–]\s*(.+)$/);
-    
-    if (dashMatch) {
-      nome_decisor = dashMatch[1].trim();
-      const description = dashMatch[2].trim();
-      
-      // Extract company from description patterns:
-      // "Title at/na/no/em Company"
-      // "Title - Company"  
-      // "CEO | Company"
-      const companyPatterns = [
-        /(?:at|em|na|no|@|da|do|de)\s+(.+)$/i,
-        /(?:CEO|Fundador|Sócio|Diretor|Proprietário|Owner|Founder|Managing|Gerente|Presidente|Vice)[^|]*?(?:at|em|na|no|@|da|do|de|-|–)\s*(.+)$/i,
-      ];
-      
-      for (const pattern of companyPatterns) {
-        const match = description.match(pattern);
-        if (match) {
-          nome_empresa = match[1].replace(/\s*\.{3,}.*$/, "").trim();
-          break;
-        }
-      }
-      
-      // If no "at/na" pattern found, try snippet for company
-      if (!nome_empresa) {
-        // Snippet often has "Title · Company · Location" or "Company · Title"
-        const snippetCompanyPatterns = [
-          /(?:at|em|na|no|@)\s+([^.·|,\n]+)/i,
-          /^([^·]+?)\s*·\s*(?:.*?(?:diretor|CEO|fundador|sócio|proprietário|gerente|presidente))/i,
-          /(?:diretor|CEO|fundador|sócio|proprietário|gerente|presidente)[^·]*·\s*([^·\n]+)/i,
-        ];
-        for (const pattern of snippetCompanyPatterns) {
-          const match = snippet.match(pattern);
-          if (match) {
-            const candidate = match[1].trim();
-            // Filter out garbage: must be >3 chars, not just a common word
-            if (candidate.length > 3 && !isGenericTerm(candidate)) {
-              nome_empresa = candidate;
-              break;
-            }
-          }
-        }
-      }
-      
-      // Still no company? Use the description itself if it looks like a company name
-      // (contains Ltda, S/A, S.A., Inc, etc.)
-      if (!nome_empresa) {
-        const companyIndicators = /(?:ltda|s\/a|s\.a\.|inc|corp|eireli|industria|comércio|comercio|group|grupo)/i;
-        if (companyIndicators.test(description)) {
-          nome_empresa = description.replace(/\s*\.{3,}.*$/, "").trim();
-        }
-      }
-    } else {
-      // No dash in title — just a name
-      nome_decisor = cleanTitle;
-    }
-    
-    // Last resort: check snippet for company indicators
-    if (!nome_empresa && snippet) {
-      const companyIndicators = /(?:ltda|s\/a|s\.a\.|eireli|industria|comércio|comercio)/i;
-      const parts = snippet.split(/[·|]/);
-      for (const part of parts) {
-        const candidate = part.trim();
-        if (companyIndicators.test(candidate) && candidate.length > 5) {
-          nome_empresa = candidate.replace(/\s*\.{3,}.*$/, "").trim();
-          break;
-        }
-      }
-    }
-    
-    // If still no company, mark as person-only lead with decisor name
-    if (!nome_empresa && nome_decisor) {
-      nome_empresa = `[Decisor] ${nome_decisor}`;
-    }
-  } else {
-    nome_empresa = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").trim();
-  }
-
-  // Clean up nome_decisor: remove trailing "..." truncations
-  if (nome_decisor) {
-    nome_decisor = nome_decisor.replace(/\s*\.{3,}$/, "").trim();
-  }
-
-  return {
-    nome_empresa: nome_empresa || "Sem nome",
-    telefone: null,
-    site: null,
-    endereco: null,
-    instagram: null,
-    linkedin: link.includes("linkedin.com") ? link : null,
-    nome_decisor,
-  };
-}
-
-function isGenericTerm(text: string): boolean {
-  const generic = [
-    "experiência", "experience", "diretor", "director", "gerente", "manager",
-    "presidente", "president", "engenharia", "engineering", "administração",
-    "gestão", "socio", "sócio", "fundador", "founder", "ceo", "coo", "cfo",
-    "vice", "senior", "junior", "pleno", "organizações", "organizations",
-    "about", "sobre", "education", "formação", "skills", "competências",
-    "atividades", "activities", "publicações", "publications", "voluntário",
-    "volunteer", "interesses", "interests", "cursos", "courses", "projetos",
-    "projects", "idiomas", "languages", "recomendações", "recommendations",
-    "casado", "solteiro", "divorciado", "meses", "anos", "years", "months",
-  ];
-  return generic.includes(text.toLowerCase().trim());
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -307,47 +291,51 @@ Deno.serve(async (req) => {
     const maxPages = 4;
 
     if (source === "linkedin") {
-      const queryLower = query.toLowerCase();
       const industryPart = setor ? ` "${setor}"` : "";
       const keywordsPart = keywords ? ` ${keywords}` : "";
-      // Build focused LinkedIn queries: Job Title + Industry + Keywords + Location
-      const searchQueries = [
-        `site:linkedin.com/in "${query}"${industryPart}${keywordsPart} "${location}"`,
-        `site:linkedin.com/in "${query}"${industryPart} "${location}" (proprietário OR dono OR CEO OR fundador OR diretor OR sócio OR owner OR founder)`,
-      ];
+      // Single focused query - no secondary query with Portuguese job titles
+      const searchQuery = `site:linkedin.com/in "${query}"${industryPart}${keywordsPart} "${location}"`;
 
-      for (const searchQuery of searchQueries) {
-        if (provider === "serpapi") {
-          for (let page = 0; page < maxPages; page++) {
-            const start = page * 10;
-            console.log(`SerpApi LinkedIn page ${page + 1}, start=${start}, q=${searchQuery}`);
-            const results = await fetchSerpApi(searchQuery, apiKey, start, "google");
-            if (results.length === 0) break;
-            // Post-filter: title or snippet must mention the search term
-            const filtered = results.filter((r: any) => {
-              const t = (r.title || "").toLowerCase();
-              const s = (r.snippet || "").toLowerCase();
-              return t.includes(queryLower) || s.includes(queryLower);
-            });
-            allResults.push(...filtered);
-            if (allResults.length >= targetCount) break;
-          }
-        } else {
-          for (let page = 1; page <= maxPages; page++) {
-            console.log(`SearchApi LinkedIn page ${page}, q=${searchQuery}`);
-            const results = await fetchSearchApi(searchQuery, apiKey, page, "google");
-            if (results.length === 0) break;
-            const filtered = results.filter((r: any) => {
-              const t = (r.title || "").toLowerCase();
-              const s = (r.snippet || "").toLowerCase();
-              return t.includes(queryLower) || s.includes(queryLower);
-            });
-            allResults.push(...filtered);
-            if (allResults.length >= targetCount) break;
-          }
+      if (provider === "serpapi") {
+        for (let page = 0; page < maxPages; page++) {
+          const start = page * 10;
+          console.log(`SerpApi LinkedIn page ${page + 1}, start=${start}, q=${searchQuery}`);
+          const results = await fetchSerpApi(searchQuery, apiKey, start, "google");
+          if (results.length === 0) break;
+          allResults.push(...results);
+          if (allResults.length >= targetCount) break;
         }
-        if (allResults.length >= targetCount) break;
+      } else {
+        for (let page = 1; page <= maxPages; page++) {
+          console.log(`SearchApi LinkedIn page ${page}, q=${searchQuery}`);
+          const results = await fetchSearchApi(searchQuery, apiKey, page, "google");
+          if (results.length === 0) break;
+          allResults.push(...results);
+          if (allResults.length >= targetCount) break;
+        }
       }
+
+      // Use AI to parse and validate all LinkedIn results
+      const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
+      const leads = await parseLinkedInResultsBatch(
+        allResults,
+        { jobTitle: query, industry: setor || "", location, keywords: keywords || "" },
+        lovableKey
+      );
+
+      // Deduplicate
+      const seen = new Set<string>();
+      const uniqueLeads = leads.filter((lead) => {
+        const key = `${lead.nome_empresa.toLowerCase()}_${(lead.nome_decisor || "").toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return new Response(
+        JSON.stringify({ leads: uniqueLeads, total: uniqueLeads.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     } else {
       const searchQuery = `${query} em ${location}`;
 
@@ -369,28 +357,24 @@ Deno.serve(async (req) => {
           if (allResults.length >= targetCount) break;
         }
       }
+
+      // Parse and deduplicate Google Maps results
+      const seen = new Set<string>();
+      const leads = allResults
+        .map((r) => parseGoogleMapsResult(r))
+        .filter((lead) => {
+          if (lead.nome_empresa === "Sem nome") return false;
+          const key = `${lead.nome_empresa.toLowerCase()}_${lead.telefone || ""}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+      return new Response(
+        JSON.stringify({ leads, total: leads.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
-
-    // Deduplicate and parse
-    const seen = new Set<string>();
-    let leads = allResults
-      .map((r) => source === "linkedin" ? parseLinkedInResult(r) : parseGoogleMapsResult(r))
-      .filter((lead) => {
-        // Filter out leads without a real company name
-        if (lead.nome_empresa === "Sem nome") return false;
-        if (source === "linkedin" && lead.nome_empresa.startsWith("[Decisor]")) return false;
-        if (source === "linkedin" && isGenericTerm(lead.nome_empresa)) return false;
-        
-        const key = `${lead.nome_empresa.toLowerCase()}_${lead.telefone || ""}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-
-    return new Response(
-      JSON.stringify({ leads, total: leads.length }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("extract-leads error:", message);

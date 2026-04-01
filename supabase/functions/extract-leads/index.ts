@@ -165,31 +165,98 @@ function parseLinkedInResult(r: any) {
   let nome_decisor: string | null = null;
 
   if (link.includes("/company/")) {
-    // Company page: extract company name from title
     nome_empresa = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").replace(/\s*LinkedIn$/i, "").trim();
   } else if (link.includes("/in/")) {
-    // Person profile: the title IS the person, extract company from snippet
-    nome_decisor = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").replace(/\s*LinkedIn$/i, "").trim();
+    // LinkedIn person titles follow patterns like:
+    // "Name - Title at Company | LinkedIn"
+    // "Name - Title na Company | LinkedIn"  
+    // "Name | LinkedIn"
     
-    // Try to find company name in snippet
-    const companyPatterns = [
-      /(?:at|em|na|no|@)\s+([^.·|,\-–]+)/i,
-      /(?:CEO|Fundador|Sócio|Diretor|Proprietário|Owner|Founder|Managing)\s+(?:at|em|na|no|de|da|do|@|-|–)\s*([^.·|,]+)/i,
-    ];
-    for (const pattern of companyPatterns) {
-      const match = snippet.match(pattern);
-      if (match) {
-        nome_empresa = match[1].trim();
-        break;
+    // Clean the title: remove "| LinkedIn" suffix
+    const cleanTitle = title.replace(/\s*\|?\s*LinkedIn\s*$/i, "").trim();
+    
+    // Try to split "Name - Description"
+    const dashMatch = cleanTitle.match(/^([^|\-–]+?)\s*[\-–]\s*(.+)$/);
+    
+    if (dashMatch) {
+      nome_decisor = dashMatch[1].trim();
+      const description = dashMatch[2].trim();
+      
+      // Extract company from description patterns:
+      // "Title at/na/no/em Company"
+      // "Title - Company"  
+      // "CEO | Company"
+      const companyPatterns = [
+        /(?:at|em|na|no|@|da|do|de)\s+(.+)$/i,
+        /(?:CEO|Fundador|Sócio|Diretor|Proprietário|Owner|Founder|Managing|Gerente|Presidente|Vice)[^|]*?(?:at|em|na|no|@|da|do|de|-|–)\s*(.+)$/i,
+      ];
+      
+      for (const pattern of companyPatterns) {
+        const match = description.match(pattern);
+        if (match) {
+          nome_empresa = match[1].replace(/\s*\.{3,}.*$/, "").trim();
+          break;
+        }
+      }
+      
+      // If no "at/na" pattern found, try snippet for company
+      if (!nome_empresa) {
+        // Snippet often has "Title · Company · Location" or "Company · Title"
+        const snippetCompanyPatterns = [
+          /(?:at|em|na|no|@)\s+([^.·|,\n]+)/i,
+          /^([^·]+?)\s*·\s*(?:.*?(?:diretor|CEO|fundador|sócio|proprietário|gerente|presidente))/i,
+          /(?:diretor|CEO|fundador|sócio|proprietário|gerente|presidente)[^·]*·\s*([^·\n]+)/i,
+        ];
+        for (const pattern of snippetCompanyPatterns) {
+          const match = snippet.match(pattern);
+          if (match) {
+            const candidate = match[1].trim();
+            // Filter out garbage: must be >3 chars, not just a common word
+            if (candidate.length > 3 && !isGenericTerm(candidate)) {
+              nome_empresa = candidate;
+              break;
+            }
+          }
+        }
+      }
+      
+      // Still no company? Use the description itself if it looks like a company name
+      // (contains Ltda, S/A, S.A., Inc, etc.)
+      if (!nome_empresa) {
+        const companyIndicators = /(?:ltda|s\/a|s\.a\.|inc|corp|eireli|industria|comércio|comercio|group|grupo)/i;
+        if (companyIndicators.test(description)) {
+          nome_empresa = description.replace(/\s*\.{3,}.*$/, "").trim();
+        }
+      }
+    } else {
+      // No dash in title — just a name
+      nome_decisor = cleanTitle;
+    }
+    
+    // Last resort: check snippet for company indicators
+    if (!nome_empresa && snippet) {
+      const companyIndicators = /(?:ltda|s\/a|s\.a\.|eireli|industria|comércio|comercio)/i;
+      const parts = snippet.split(/[·|]/);
+      for (const part of parts) {
+        const candidate = part.trim();
+        if (companyIndicators.test(candidate) && candidate.length > 5) {
+          nome_empresa = candidate.replace(/\s*\.{3,}.*$/, "").trim();
+          break;
+        }
       }
     }
-
-    // If no company found, use first meaningful part of snippet
-    if (!nome_empresa) {
-      nome_empresa = snippet.split(/[.·|]/)[0]?.trim() || title;
+    
+    // If still no company, mark as person-only lead with decisor name
+    if (!nome_empresa && nome_decisor) {
+      nome_empresa = `[Decisor] ${nome_decisor}`;
     }
   } else {
     nome_empresa = title.replace(/\s*[|\-–].*LinkedIn.*/gi, "").trim();
+  }
+
+  // Clean up nome_decisor: remove trailing "..." truncations
+  if (nome_decisor) {
+    nome_decisor = nome_decisor.replace(/\s*\.{3,}$/, "").trim();
   }
 
   return {
@@ -201,6 +268,21 @@ function parseLinkedInResult(r: any) {
     linkedin: link.includes("linkedin.com") ? link : null,
     nome_decisor,
   };
+}
+
+function isGenericTerm(text: string): boolean {
+  const generic = [
+    "experiência", "experience", "diretor", "director", "gerente", "manager",
+    "presidente", "president", "engenharia", "engineering", "administração",
+    "gestão", "socio", "sócio", "fundador", "founder", "ceo", "coo", "cfo",
+    "vice", "senior", "junior", "pleno", "organizações", "organizations",
+    "about", "sobre", "education", "formação", "skills", "competências",
+    "atividades", "activities", "publicações", "publications", "voluntário",
+    "volunteer", "interesses", "interests", "cursos", "courses", "projetos",
+    "projects", "idiomas", "languages", "recomendações", "recommendations",
+    "casado", "solteiro", "divorciado", "meses", "anos", "years", "months",
+  ];
+  return generic.includes(text.toLowerCase().trim());
 }
 
 Deno.serve(async (req) => {

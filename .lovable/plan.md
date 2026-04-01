@@ -1,60 +1,47 @@
 
 
-# Separar Google Maps e LinkedIn em módulos distintos
+# Melhorar qualidade da busca LinkedIn
 
-## Contexto
+## Problema
 
-Atualmente, a página de busca (Index) tem um toggle entre Google Maps e LinkedIn, mas ambos compartilham a mesma edge function, os mesmos campos de input e o mesmo fluxo. O usuário quer que cada fonte funcione como um produto especializado:
+A extração de empresa via regex no `parseLinkedInResult` é fundamentalmente frágil. O título do LinkedIn vem em formatos muito variados e o parser atual extrai fragmentos de texto aleatórios como nome de empresa (ex: "in", "ging", "r", "says: 'A rising tide lifts all boats'", "LinkedIn", "Carreiras"). Além disso, o filtro de relevância só verifica se o termo da busca aparece no título/snippet, o que é insuficiente.
 
-- **Google Maps** → estilo GLeads (busca local de empresas por nicho + cidade, retorna telefone, site, endereço, redes sociais)
-- **LinkedIn** → estilo Apollo/Lusha (busca de pessoas/decisores por cargo, empresa, setor; retorna nome do decisor, cargo, empresa, perfil LinkedIn)
+## Solução
 
-## Plano
+Substituir o parser regex por uma chamada à AI (Lovable AI / Gemini Flash Lite) para extrair dados estruturados de cada resultado do LinkedIn, e adicionar validação de relevância mais rigorosa.
 
-### 1. Criar duas páginas de busca separadas
+### 1. Usar AI para parsear resultados LinkedIn (edge function)
 
-- **`/google-search`** — Busca Google Maps (GLeads)
-  - Campos: "Nicho/Segmento" + "Cidade/Região"
-  - Foco em dados de empresa: nome, telefone, site, endereço, Instagram
-  - Botão "Extrair Leads"
+Em vez de regex, enviar um batch dos resultados brutos (title + snippet + link) para a AI com um prompt pedindo:
+- `nome_decisor`: nome da pessoa
+- `nome_empresa`: empresa onde trabalha (null se não identificável)
+- `cargo`: cargo/função
+- `relevante`: boolean — se o resultado é relevante para o job title + industry + location buscados
 
-- **`/linkedin-search`** — Busca LinkedIn (Apollo/Lusha)
-  - Campos: "Cargo/Função" (ex: CEO, Diretor de Marketing), "Setor/Empresa" (ex: agências de marketing), "Localização"
-  - Foco em dados de pessoa: nome do decisor, cargo, empresa, perfil LinkedIn
-  - Resultados já vêm com decisor preenchido
+Processar em batches de ~10 resultados por chamada para eficiência.
 
-- Página `/` (Index) vira um hub com dois cards grandes para escolher o tipo de busca
+### 2. Filtro de relevância rigoroso
 
-### 2. Separar a edge function ou usar parâmetros distintos
+- Descartar resultados onde a AI retorna `relevante: false`
+- Descartar resultados onde `nome_empresa` é null ou tem menos de 3 caracteres
+- Descartar empresas que são claramente genéricas ("LinkedIn", single words sem significado)
 
-- Manter `extract-leads` mas com lógica bem separada internamente:
-  - `source: "google"` → Google Maps engine, parser de empresa
-  - `source: "linkedin"` → Google search `site:linkedin.com/in` com filtros por cargo, parser focado em pessoa/decisor
-- LinkedIn query template muda: `site:linkedin.com/in "{cargo}" "{setor}" "{localização}"` com filtros de cargo (CEO, Diretor, Fundador, etc.)
+### 3. Melhorar construção da query
 
-### 3. Atualizar sidebar e rotas
+- Remover a segunda query com termos de cargo em português (proprietário OR dono OR CEO...) que polui os resultados
+- Usar uma query mais focada: `site:linkedin.com/in "{jobTitle}" "{industry}" "{location}"`
+- Se keywords existir, adicionar como filtro adicional
 
-- Sidebar passa de 3 para 4 itens:
-  - 🔍 Google Maps (busca empresas)
-  - 👤 LinkedIn (busca decisores)
-  - 📋 Leads (CRM)
-  - ⚙️ Configurações
+### Arquivos a editar
 
-### 4. Atualizar a tabela de leads
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/extract-leads/index.ts` | Substituir `parseLinkedInResult` por chamada AI em batch; simplificar queries; adicionar validação de relevância |
 
-- Adicionar coluna "Fonte" visível na tabela para diferenciar leads Google vs LinkedIn
-- Filtro por fonte na lista de leads
+### Detalhes técnicos
 
-### Arquivos a criar/editar
-
-| Arquivo | Ação |
-|---------|------|
-| `src/pages/GoogleSearch.tsx` | Criar — formulário de busca Google Maps |
-| `src/pages/LinkedInSearch.tsx` | Criar — formulário de busca LinkedIn com campos cargo/setor/local |
-| `src/pages/Index.tsx` | Refatorar — hub de escolha entre as duas buscas |
-| `src/components/AppSidebar.tsx` | Editar — adicionar itens de navegação |
-| `src/App.tsx` | Editar — adicionar rotas |
-| `supabase/functions/extract-leads/index.ts` | Editar — refinar lógica LinkedIn para buscar por cargo/função, não por nicho de empresa |
-| `src/pages/Leads.tsx` | Editar — adicionar filtro por fonte, coluna visível |
-| `src/components/leads/LeadFilters.tsx` | Editar — adicionar filtro "Fonte" |
+- Usar `google/gemini-2.5-flash-lite` via `ai.gateway.lovable.dev` (sem API key extra)
+- Precisa do `LOVABLE_API_KEY` (já disponível como env var nas edge functions)
+- Cada batch de ~10 resultados = 1 chamada AI com tool calling retornando array de objetos
+- Latência estimada: +2-3s por batch, aceitável dado que a busca já leva ~10s
 

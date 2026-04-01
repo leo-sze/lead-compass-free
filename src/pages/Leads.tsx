@@ -88,7 +88,7 @@ const Leads = () => {
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, hasPhone, hasSite, hasInstagram]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),

@@ -1,4 +1,4 @@
-import { Search, Users, Settings, Zap } from "lucide-react";
+import { Search, Globe, Linkedin, Users, Settings, Zap } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/sidebar";
 
 const items = [
-  { title: "Busca", url: "/", icon: Search },
+  { title: "Início", url: "/", icon: Search },
+  { title: "Google Maps", url: "/google-search", icon: Globe },
+  { title: "LinkedIn", url: "/linkedin-search", icon: Linkedin },
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];

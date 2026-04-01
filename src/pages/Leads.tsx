@@ -24,6 +24,7 @@ const Leads = () => {
   const [filter, setFilter] = useState("");
   const [selectedTermo, setSelectedTermo] = useState("all");
   const [selectedCidade, setSelectedCidade] = useState("all");
+  const [selectedFonte, setSelectedFonte] = useState("all");
   const [hasPhone, setHasPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
@@ -59,6 +60,11 @@ const Leads = () => {
     return Array.from(set).sort();
   }, [leads]);
 
+  const fontes = useMemo(() => {
+    const set = new Set(leads.map((l) => l.fonte).filter(Boolean) as string[]);
+    return Array.from(set).sort();
+  }, [leads]);
+
   const filtered = useMemo(() => {
     let result = leads;
     if (filter) {
@@ -75,11 +81,14 @@ const Leads = () => {
     if (selectedCidade !== "all") {
       result = result.filter((l) => l.cidade === selectedCidade);
     }
+    if (selectedFonte !== "all") {
+      result = result.filter((l) => l.fonte === selectedFonte);
+    }
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, hasPhone, hasSite, hasInstagram]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -251,6 +260,9 @@ const Leads = () => {
         cidades={cidades}
         selectedCidade={selectedCidade}
         onCidadeChange={setSelectedCidade}
+        fontes={fontes}
+        selectedFonte={selectedFonte}
+        onFonteChange={setSelectedFonte}
         hasPhone={hasPhone}
         onHasPhoneChange={setHasPhone}
         hasSite={hasSite}
@@ -278,13 +290,14 @@ const Leads = () => {
                 <TableHead>Endereço</TableHead>
                 <TableHead>Redes</TableHead>
                 <TableHead>Cidade</TableHead>
+                <TableHead>Fonte</TableHead>
                 <TableHead className="w-20">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
@@ -325,6 +338,11 @@ const Leads = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{lead.cidade || "—"}</TableCell>
+                    <TableCell>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${lead.fonte === "linkedin" ? "bg-blue-500/10 text-blue-400" : "bg-primary/10 text-primary"}`}>
+                        {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte || "—"}
+                      </span>
+                    </TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"

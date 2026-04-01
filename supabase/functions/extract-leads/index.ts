@@ -1,6 +1,6 @@
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
@@ -287,8 +287,8 @@ Deno.serve(async (req) => {
     const { query, location, setor, keywords, apiKey, provider, source } = parsed.data;
 
     const allResults: any[] = [];
-    const targetCount = 60;
-    const maxPages = 4;
+    const targetCount = source === "linkedin" ? 20 : 60;
+    const maxPages = source === "linkedin" ? 2 : 4;
 
     if (source === "linkedin") {
       const industryPart = setor ? ` "${setor}"` : "";

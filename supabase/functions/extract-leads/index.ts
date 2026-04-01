@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { query, location, apiKey, provider, source } = parsed.data;
+    const { query, location, setor, apiKey, provider, source } = parsed.data;
 
     const allResults: any[] = [];
     const targetCount = 60;
@@ -225,10 +225,11 @@ Deno.serve(async (req) => {
 
     if (source === "linkedin") {
       const queryLower = query.toLowerCase();
-      // Use intitle to force term in page title; separate queries for companies vs people
+      const setorPart = setor ? ` "${setor}"` : "";
+      // LinkedIn: query = cargo/função, setor = tipo de empresa
       const searchQueries = [
-        `site:linkedin.com/company intitle:"${query}" "${location}"`,
-        `site:linkedin.com/in "${query}" "${location}" (proprietário OR dono OR CEO OR fundador OR diretor OR sócio OR owner OR founder)`,
+        `site:linkedin.com/in "${query}"${setorPart} "${location}" (proprietário OR dono OR CEO OR fundador OR diretor OR sócio OR owner OR founder)`,
+        `site:linkedin.com/in "${query}"${setorPart} "${location}"`,
       ];
 
       for (const searchQuery of searchQueries) {

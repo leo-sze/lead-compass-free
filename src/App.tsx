@@ -5,6 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/Layout";
 import Index from "./pages/Index";
+import GoogleSearch from "./pages/GoogleSearch";
+import LinkedInSearch from "./pages/LinkedInSearch";
 import Leads from "./pages/Leads";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
@@ -20,6 +22,8 @@ const App = () => (
         <Layout>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/google-search" element={<GoogleSearch />} />
+            <Route path="/linkedin-search" element={<LinkedInSearch />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />

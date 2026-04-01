@@ -24,6 +24,7 @@ const Leads = () => {
   const [filter, setFilter] = useState("");
   const [selectedTermo, setSelectedTermo] = useState("all");
   const [selectedCidade, setSelectedCidade] = useState("all");
+  const [selectedFonte, setSelectedFonte] = useState("all");
   const [hasPhone, setHasPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);

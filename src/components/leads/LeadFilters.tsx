@@ -12,6 +12,9 @@ interface LeadFiltersProps {
   cidades: string[];
   selectedCidade: string;
   onCidadeChange: (value: string) => void;
+  fontes: string[];
+  selectedFonte: string;
+  onFonteChange: (value: string) => void;
   hasPhone: boolean;
   onHasPhoneChange: (value: boolean) => void;
   hasSite: boolean;
@@ -24,6 +27,7 @@ const LeadFilters = ({
   filter, onFilterChange,
   termos, selectedTermo, onTermoChange,
   cidades, selectedCidade, onCidadeChange,
+  fontes, selectedFonte, onFonteChange,
   hasPhone, onHasPhoneChange,
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
@@ -64,6 +68,20 @@ const LeadFilters = ({
               <SelectItem value="all">Todas as cidades</SelectItem>
               {cidades.map((c) => (
                 <SelectItem key={c} value={c}>{c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="min-w-[140px]">
+          <Label className="text-xs text-muted-foreground mb-1">Fonte</Label>
+          <Select value={selectedFonte} onValueChange={onFonteChange}>
+            <SelectTrigger className="bg-secondary/50">
+              <SelectValue placeholder="Todas as fontes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas as fontes</SelectItem>
+              {fontes.map((f) => (
+                <SelectItem key={f} value={f}>{f === "google" ? "Google Maps" : f === "linkedin" ? "LinkedIn" : f}</SelectItem>
               ))}
             </SelectContent>
           </Select>

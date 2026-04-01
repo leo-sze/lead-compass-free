@@ -60,6 +60,11 @@ const Leads = () => {
     return Array.from(set).sort();
   }, [leads]);
 
+  const fontes = useMemo(() => {
+    const set = new Set(leads.map((l) => l.fonte).filter(Boolean) as string[]);
+    return Array.from(set).sort();
+  }, [leads]);
+
   const filtered = useMemo(() => {
     let result = leads;
     if (filter) {

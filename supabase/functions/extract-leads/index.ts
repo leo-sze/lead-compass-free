@@ -105,6 +105,7 @@ async function lookupCnpjBatch(leads: any[], firecrawlKey: string, lovableKey: s
 const BodySchema = z.object({
   query: z.string().min(1).max(200),
   location: z.string().min(1).max(200),
+  setor: z.string().max(200).optional(),
   apiKey: z.string().min(1),
   provider: z.enum(["serpapi", "searchapi"]),
   source: z.enum(["google", "linkedin"]).default("google"),

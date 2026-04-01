@@ -260,6 +260,9 @@ const Leads = () => {
         cidades={cidades}
         selectedCidade={selectedCidade}
         onCidadeChange={setSelectedCidade}
+        fontes={fontes}
+        selectedFonte={selectedFonte}
+        onFonteChange={setSelectedFonte}
         hasPhone={hasPhone}
         onHasPhoneChange={setHasPhone}
         hasSite={hasSite}

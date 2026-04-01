@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, MapPin, Briefcase, Loader2, Linkedin } from "lucide-react";
+import { Search, MapPin, Briefcase, Loader2, Linkedin, Tag, Factory } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +9,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 
 const LinkedInSearch = () => {
-  const [cargo, setCargo] = useState("");
-  const [setor, setSetor] = useState("");
+  const [jobTitle, setJobTitle] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -19,7 +20,7 @@ const LinkedInSearch = () => {
   const navigate = useNavigate();
 
   const handleSearch = async () => {
-    if (!cargo.trim() || !location.trim()) {
+    if (!jobTitle.trim() || !location.trim()) {
       toast({ title: "Preencha cargo e localização", variant: "destructive" });
       return;
     }
@@ -44,9 +45,10 @@ const LinkedInSearch = () => {
 
       const { data, error } = await supabase.functions.invoke("extract-leads", {
         body: {
-          query: cargo.trim(),
+          query: jobTitle.trim(),
           location: location.trim(),
-          setor: setor.trim() || undefined,
+          setor: industry.trim() || undefined,
+          keywords: keywords.trim() || undefined,
           apiKey: apiKeyData.value,
           provider: providerData?.value || "serpapi",
           source: "linkedin",
@@ -73,8 +75,8 @@ const LinkedInSearch = () => {
             linkedin: lead.linkedin || null,
             cnpj: lead.cnpj || null,
             nome_decisor: lead.nome_decisor || null,
-            query_origem: `${cargo}${setor ? ` / ${setor}` : ""} - ${location}`,
-            termo_pesquisa: cargo.trim(),
+            query_origem: `${jobTitle}${industry ? ` / ${industry}` : ""}${keywords ? ` [${keywords}]` : ""} - ${location}`,
+            termo_pesquisa: jobTitle.trim(),
             cidade: lead.cidade || null,
             fonte: "linkedin",
           },
@@ -109,7 +111,7 @@ const LinkedInSearch = () => {
           Encontre decisores
         </h1>
         <p className="text-muted-foreground text-lg">
-          Busque por cargo, setor e localização. Estilo Apollo / Lusha.
+          Busque por cargo, indústria, palavras-chave e localização.
         </p>
       </div>
 
@@ -119,13 +121,13 @@ const LinkedInSearch = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Cargo / Função</label>
+            <label className="text-sm font-medium text-muted-foreground">Job Title (Cargo)</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Ex: CEO, Diretor de Marketing, Fundador..."
-                value={cargo}
-                onChange={(e) => setCargo(e.target.value)}
+                value={jobTitle}
+                onChange={(e) => setJobTitle(e.target.value)}
                 className="pl-10 bg-secondary/50 border-border/50"
                 disabled={loading}
               />
@@ -133,13 +135,13 @@ const LinkedInSearch = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Setor / Tipo de Empresa (opcional)</label>
+            <label className="text-sm font-medium text-muted-foreground">Industry (Indústria / Setor)</label>
             <div className="relative">
-              <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Factory className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Ex: Agência de marketing, Academias, Clínicas..."
-                value={setor}
-                onChange={(e) => setSetor(e.target.value)}
+                placeholder="Ex: Tecnologia, Alimentos, Construção Civil..."
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
                 className="pl-10 bg-secondary/50 border-border/50"
                 disabled={loading}
               />
@@ -147,7 +149,21 @@ const LinkedInSearch = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Localização</label>
+            <label className="text-sm font-medium text-muted-foreground">Keywords (Palavras-chave)</label>
+            <div className="relative">
+              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Ex: B2B, SaaS, exportação, varejo..."
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                className="pl-10 bg-secondary/50 border-border/50"
+                disabled={loading}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-muted-foreground">Location (Localização)</label>
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input

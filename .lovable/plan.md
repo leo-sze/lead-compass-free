@@ -1,35 +1,60 @@
 
-<title>GLeads Clone - Extrator de Leads B2B</title>
-<overview>Ferramenta de extração de leads B2B com busca automatizada, CRM interno, integração WhatsApp e exportação CSV. Dark mode, design profissional, dados salvos no Supabase sem autenticação.</overview>
 
-<steps>
-<step>
-<title>Setup Supabase e tabela de leads</title>
-<description>Criar tabela `leads` no Supabase com campos: nome_empresa, telefone, site, endereco, instagram, linkedin, query_origem, created_at. Habilitar RLS com política pública de leitura/escrita (sem login). Adicionar unique constraint para evitar duplicados (nome_empresa + telefone).</description>
-</step>
+# Separar Google Maps e LinkedIn em módulos distintos
 
-<step>
-<title>Design system dark mode</title>
-<description>Configurar tema dark como padrão com cores profissionais (fundo escuro #0F172A, accent verde/azul neon). Criar layout de dashboard com sidebar de navegação (Busca, Leads, Configurações).</description>
-</step>
+## Contexto
 
-<step>
-<title>Página de Busca com extração</title>
-<description>Dois campos: "O que você busca?" e "Onde?". Botão "Pesquisar e Extrair" que chama uma Edge Function. Barra de progresso animada durante a extração. A Edge Function usa a API configurada (SerpApi ou SearchApi) para buscar resultados do Google Maps, faz parsing dos dados e retorna leads limpos (nome, telefone, site, endereço, redes sociais).</description>
-</step>
+Atualmente, a página de busca (Index) tem um toggle entre Google Maps e LinkedIn, mas ambos compartilham a mesma edge function, os mesmos campos de input e o mesmo fluxo. O usuário quer que cada fonte funcione como um produto especializado:
 
-<step>
-<title>Tabela de Leads (CRM)</title>
-<description>Tabela com todos os leads extraídos, com colunas para cada campo. Botão de WhatsApp direto em cada linha (abre wa.me com mensagem customizada e variáveis). Filtros por query de origem. Seleção múltipla para ações em lote. Botão de exportar CSV com todos os leads ou apenas selecionados.</description>
-</step>
+- **Google Maps** → estilo GLeads (busca local de empresas por nicho + cidade, retorna telefone, site, endereço, redes sociais)
+- **LinkedIn** → estilo Apollo/Lusha (busca de pessoas/decisores por cargo, empresa, setor; retorna nome do decisor, cargo, empresa, perfil LinkedIn)
 
-<step>
-<title>Página de Configurações</title>
-<description>Campo para colar API Key (SerpApi ou SearchApi), com seletor de provedor. Template de mensagem WhatsApp editável com variáveis disponíveis ({nome_empresa}, {telefone}). Preview da mensagem. Configurações salvas no Supabase em tabela `settings`.</description>
-</step>
+## Plano
 
-<step>
-<title>Edge Function de extração</title>
-<description>Criar Edge Function que recebe query + localização + API key do usuário. Faz chamada à API selecionada (SerpApi/SearchApi) buscando no Google Maps. Faz parsing e limpeza dos resultados. Verifica duplicados no Supabase antes de inserir. Retorna leads encontrados com contagem de novos vs duplicados.</description>
-</step>
-</steps>
+### 1. Criar duas páginas de busca separadas
+
+- **`/google-search`** — Busca Google Maps (GLeads)
+  - Campos: "Nicho/Segmento" + "Cidade/Região"
+  - Foco em dados de empresa: nome, telefone, site, endereço, Instagram
+  - Botão "Extrair Leads"
+
+- **`/linkedin-search`** — Busca LinkedIn (Apollo/Lusha)
+  - Campos: "Cargo/Função" (ex: CEO, Diretor de Marketing), "Setor/Empresa" (ex: agências de marketing), "Localização"
+  - Foco em dados de pessoa: nome do decisor, cargo, empresa, perfil LinkedIn
+  - Resultados já vêm com decisor preenchido
+
+- Página `/` (Index) vira um hub com dois cards grandes para escolher o tipo de busca
+
+### 2. Separar a edge function ou usar parâmetros distintos
+
+- Manter `extract-leads` mas com lógica bem separada internamente:
+  - `source: "google"` → Google Maps engine, parser de empresa
+  - `source: "linkedin"` → Google search `site:linkedin.com/in` com filtros por cargo, parser focado em pessoa/decisor
+- LinkedIn query template muda: `site:linkedin.com/in "{cargo}" "{setor}" "{localização}"` com filtros de cargo (CEO, Diretor, Fundador, etc.)
+
+### 3. Atualizar sidebar e rotas
+
+- Sidebar passa de 3 para 4 itens:
+  - 🔍 Google Maps (busca empresas)
+  - 👤 LinkedIn (busca decisores)
+  - 📋 Leads (CRM)
+  - ⚙️ Configurações
+
+### 4. Atualizar a tabela de leads
+
+- Adicionar coluna "Fonte" visível na tabela para diferenciar leads Google vs LinkedIn
+- Filtro por fonte na lista de leads
+
+### Arquivos a criar/editar
+
+| Arquivo | Ação |
+|---------|------|
+| `src/pages/GoogleSearch.tsx` | Criar — formulário de busca Google Maps |
+| `src/pages/LinkedInSearch.tsx` | Criar — formulário de busca LinkedIn com campos cargo/setor/local |
+| `src/pages/Index.tsx` | Refatorar — hub de escolha entre as duas buscas |
+| `src/components/AppSidebar.tsx` | Editar — adicionar itens de navegação |
+| `src/App.tsx` | Editar — adicionar rotas |
+| `supabase/functions/extract-leads/index.ts` | Editar — refinar lógica LinkedIn para buscar por cargo/função, não por nicho de empresa |
+| `src/pages/Leads.tsx` | Editar — adicionar filtro por fonte, coluna visível |
+| `src/components/leads/LeadFilters.tsx` | Editar — adicionar filtro "Fonte" |
+

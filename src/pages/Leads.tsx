@@ -81,6 +81,9 @@ const Leads = () => {
     if (selectedCidade !== "all") {
       result = result.filter((l) => l.cidade === selectedCidade);
     }
+    if (selectedFonte !== "all") {
+      result = result.filter((l) => l.fonte === selectedFonte);
+    }
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);

@@ -258,8 +258,9 @@ async function fetchSearchApi(query: string, apiKey: string, page: number, engin
   return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
 }
 
-function calculateLeadScore(r: any): { score: number; lead_quality: string } {
+function calculateLeadScore(r: any): { score: number; lead_quality: string; score_breakdown: Record<string, number> } {
   let score = 0;
+  const breakdown: Record<string, number> = {};
   const userRatingCount = r.user_ratings_total ?? r.userRatingCount ?? r.reviews ?? 0;
   const rating = r.rating ?? 0;
   const websiteUri = r.website || r.websiteUri || null;
@@ -270,38 +271,43 @@ function calculateLeadScore(r: any): { score: number; lead_quality: string } {
   const priceLevel = r.price_level ?? r.priceLevel ?? 0;
 
   // Reviews
-  if (userRatingCount < 10) return { score: 0, lead_quality: "desqualificado" };
-  if (userRatingCount >= 100) score += 25;
-  else if (userRatingCount >= 30) score += 15;
+  if (userRatingCount < 10) return { score: 0, lead_quality: "desqualificado", score_breakdown: { reviews: 0, nota: 0, website: 0, fotos: 0, horarios: 0, preco: 0 } };
+  if (userRatingCount >= 100) { score += 25; breakdown.reviews = 25; }
+  else if (userRatingCount >= 30) { score += 15; breakdown.reviews = 15; }
+  else breakdown.reviews = 0;
 
   // Rating
-  if (rating > 0 && rating < 3.8) return { score: 0, lead_quality: "desqualificado" };
-  if (rating >= 4.2) score += 20;
+  if (rating > 0 && rating < 3.8) return { score: 0, lead_quality: "desqualificado", score_breakdown: { reviews: breakdown.reviews, nota: 0, website: 0, fotos: 0, horarios: 0, preco: 0 } };
+  if (rating >= 4.2) { score += 20; breakdown.nota = 20; }
+  else breakdown.nota = 0;
 
   // Website
-  if (websiteUri) score += 20;
+  if (websiteUri) { score += 20; breakdown.website = 20; }
+  else breakdown.website = 0;
 
   // Photos
-  if (photosCount >= 10) score += 15;
-  else if (photosCount >= 3) score += 5;
+  if (photosCount >= 10) { score += 15; breakdown.fotos = 15; }
+  else if (photosCount >= 3) { score += 5; breakdown.fotos = 5; }
+  else breakdown.fotos = 0;
 
   // Opening hours
-  if (periodsCount >= 6) score += 10;
+  if (periodsCount >= 6) { score += 10; breakdown.horarios = 10; }
+  else breakdown.horarios = 0;
 
   // Price level
-  if (priceLevel >= 2) score += 10;
+  if (priceLevel >= 2) { score += 10; breakdown.preco = 10; }
+  else breakdown.preco = 0;
 
-  // Classify
   let lead_quality: string;
   if (score >= 70) lead_quality = "quente";
   else if (score >= 40) lead_quality = "morno";
   else lead_quality = "frio";
 
-  return { score, lead_quality };
+  return { score, lead_quality, score_breakdown: breakdown };
 }
 
 function parseGoogleMapsResult(r: any) {
-  const { score, lead_quality } = calculateLeadScore(r);
+  const { score, lead_quality, score_breakdown } = calculateLeadScore(r);
   return {
     nome_empresa: r.title || r.name || "Sem nome",
     telefone: r.phone || null,
@@ -312,6 +318,7 @@ function parseGoogleMapsResult(r: any) {
     nome_decisor: null,
     score,
     lead_quality,
+    score_breakdown,
   };
 }
 

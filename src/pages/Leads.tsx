@@ -121,6 +121,18 @@ const Leads = () => {
 
   const filtered = useMemo(() => {
     let result = leads;
+    if (qualityFilter !== "all") {
+      if (qualityFilter === "desqualificado") {
+        result = result.filter((l) => l.lead_quality === "desqualificado");
+      } else {
+        // Hide desqualificado by default unless explicitly selected
+        result = result.filter((l) => l.lead_quality !== "desqualificado");
+        result = result.filter((l) => l.lead_quality === qualityFilter);
+      }
+    } else {
+      // "all" hides desqualificado by default
+      result = result.filter((l) => l.lead_quality !== "desqualificado");
+    }
     if (filter) {
       const f = filter.toLowerCase();
       result = result.filter(
@@ -141,8 +153,10 @@ const Leads = () => {
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
+    // Sort by score descending
+    result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, qualityFilter]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),

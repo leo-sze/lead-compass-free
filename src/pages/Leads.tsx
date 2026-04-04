@@ -529,7 +529,7 @@ const Leads = () => {
                         />
                       </TableCell>
                       <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
-                      <TableCell>{qualityBadge(lead.lead_quality, lead.score)}</TableCell>
+                      <TableCell><QualityBadgeWithHover quality={lead.lead_quality} score={lead.score} breakdown={(lead as any).score_breakdown} /></TableCell>
                       <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
                       <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
                       <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>

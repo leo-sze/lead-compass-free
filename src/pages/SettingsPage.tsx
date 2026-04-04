@@ -14,6 +14,10 @@ const SettingsPage = () => {
   const [provider, setProvider] = useState("serpapi");
   const [googlePlacesKey, setGooglePlacesKey] = useState("");
   const [showGoogleKey, setShowGoogleKey] = useState(false);
+  const [kommoSubdomain, setKommoSubdomain] = useState("");
+  const [kommoToken, setKommoToken] = useState("");
+  const [showKommoToken, setShowKommoToken] = useState(false);
+  const [kommoPipelineId, setKommoPipelineId] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );

@@ -4,6 +4,32 @@ const corsHeaders = {
 };
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+function buildNoteText(lead: any): string | null {
+  const parts: string[] = [];
+
+  if (lead.score != null || lead.lead_quality) {
+    parts.push(`📊 SCORE: ${lead.score ?? "N/A"}/100 — ${(lead.lead_quality || "").toUpperCase()}`);
+  }
+
+  if (lead.justificativa) {
+    parts.push(`\n📋 ANÁLISE:\n${lead.justificativa}`);
+  }
+
+  const positivos = Array.isArray(lead.sinais_positivos) ? lead.sinais_positivos : [];
+  if (positivos.length > 0) {
+    parts.push(`\n✅ SINAIS POSITIVOS:\n${positivos.map((s: string) => `• ${s}`).join("\n")}`);
+  }
+
+  const negativos = Array.isArray(lead.sinais_negativos) ? lead.sinais_negativos : [];
+  if (negativos.length > 0) {
+    parts.push(`\n⚠️ SINAIS NEGATIVOS:\n${negativos.map((s: string) => `• ${s}`).join("\n")}`);
+  }
+
+  if (parts.length === 0) return null;
+
+  return `🤖 Relatório de Qualificação (LeadExtract)\n${"—".repeat(40)}\n${parts.join("\n")}`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -63,10 +89,6 @@ Deno.serve(async (req) => {
           });
         }
 
-        if (lead.site) {
-          // Use email field if available, otherwise skip
-        }
-
         contactFields.push({
           field_code: "POSITION",
           values: [{ value: lead.nome_decisor || "" }],
@@ -122,16 +144,57 @@ Deno.serve(async (req) => {
 
         if (response.ok) {
           const data = await response.json();
-          // All leads in batch succeeded
-          for (const lead of batch) {
+          
+          // Extract created lead IDs from response
+          const createdLeadIds: number[] = [];
+          if (Array.isArray(data)) {
+            for (const item of data) {
+              if (item?.id) createdLeadIds.push(item.id);
+              if (item?._embedded?.leads) {
+                for (const l of item._embedded.leads) {
+                  if (l?.id) createdLeadIds.push(l.id);
+                }
+              }
+            }
+          }
+
+          // Add notes to created leads
+          for (let j = 0; j < batch.length; j++) {
+            const lead = batch[j];
+            const kommoLeadId = createdLeadIds[j];
             results.push({ id: lead.id, status: "success" });
+
+            if (kommoLeadId) {
+              const noteText = buildNoteText(lead);
+              if (noteText) {
+                try {
+                  await fetch(
+                    `https://${subdomain}.kommo.com/api/v4/leads/${kommoLeadId}/notes`,
+                    {
+                      method: "POST",
+                      headers: {
+                        Authorization: `Bearer ${apiToken}`,
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify([
+                        {
+                          note_type: "common",
+                          params: { text: noteText },
+                        },
+                      ]),
+                    }
+                  );
+                } catch (noteErr) {
+                  console.error(`[KOMMO] Erro ao adicionar nota ao lead ${kommoLeadId}:`, noteErr);
+                }
+              }
+            }
           }
         } else {
           const errorText = await response.text();
           let errorData: any;
           try { errorData = JSON.parse(errorText); } catch { errorData = errorText; }
 
-          // Check for duplicate errors or other issues
           if (response.status === 400 && errorData?.["validation-errors"]) {
             for (let j = 0; j < batch.length; j++) {
               const leadErrors = errorData["validation-errors"]?.[j];

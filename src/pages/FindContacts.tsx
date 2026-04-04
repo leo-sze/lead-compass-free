@@ -325,6 +325,10 @@ export default function FindContacts() {
               <Download className="mr-2 h-4 w-4" />
               Exportar CSV
             </Button>
+            <Button variant="secondary" size="sm" onClick={handleSendToLeads} disabled={contacts.length === 0 || searching}>
+              <Send className="mr-2 h-4 w-4" />
+              Enviar para Leads
+            </Button>
             <Button onClick={handleSearch} disabled={searching || pendingCount === 0} size="sm">
               {searching ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Buscando {progress.current} de {progress.total}...</>

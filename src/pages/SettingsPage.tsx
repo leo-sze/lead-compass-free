@@ -32,6 +32,7 @@ const SettingsPage = () => {
         if (row.key === "api_key") setApiKey(row.value || "");
         if (row.key === "api_provider") setProvider(row.value || "serpapi");
         if (row.key === "whatsapp_template") setWhatsappTemplate(row.value || "");
+        if (row.key === "google_places_api_key") setGooglePlacesKey(row.value || "");
       }
     }
   };

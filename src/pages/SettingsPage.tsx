@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Key, MessageCircle, Eye, EyeOff } from "lucide-react";
+import { Save, Key, MessageCircle, Eye, EyeOff, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,10 @@ const SettingsPage = () => {
   const [provider, setProvider] = useState("serpapi");
   const [googlePlacesKey, setGooglePlacesKey] = useState("");
   const [showGoogleKey, setShowGoogleKey] = useState(false);
+  const [kommoSubdomain, setKommoSubdomain] = useState("");
+  const [kommoToken, setKommoToken] = useState("");
+  const [showKommoToken, setShowKommoToken] = useState(false);
+  const [kommoPipelineId, setKommoPipelineId] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );
@@ -33,6 +37,9 @@ const SettingsPage = () => {
         if (row.key === "api_provider") setProvider(row.value || "serpapi");
         if (row.key === "whatsapp_template") setWhatsappTemplate(row.value || "");
         if (row.key === "google_places_api_key") setGooglePlacesKey(row.value || "");
+        if (row.key === "kommo_subdomain") setKommoSubdomain(row.value || "");
+        if (row.key === "kommo_api_token") setKommoToken(row.value || "");
+        if (row.key === "kommo_pipeline_id") setKommoPipelineId(row.value || "");
       }
     }
   };
@@ -53,6 +60,9 @@ const SettingsPage = () => {
       await saveSetting("api_provider", provider);
       await saveSetting("whatsapp_template", whatsappTemplate);
       await saveSetting("google_places_api_key", googlePlacesKey);
+      await saveSetting("kommo_subdomain", kommoSubdomain);
+      await saveSetting("kommo_api_token", kommoToken);
+      await saveSetting("kommo_pipeline_id", kommoPipelineId);
       toast({ title: "Configurações salvas!" });
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });
@@ -156,6 +166,72 @@ const SettingsPage = () => {
             >
               {showGoogleKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/80">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            Integração Kommo
+          </CardTitle>
+          <CardDescription>
+            Exporte leads diretamente para seu CRM Kommo.{" "}
+            <a href="https://www.kommo.com/br/" target="_blank" rel="noopener" className="text-accent hover:underline">
+              Saiba mais
+            </a>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Subdomínio Kommo</label>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="minhaempresa"
+                value={kommoSubdomain}
+                onChange={(e) => setKommoSubdomain(e.target.value)}
+                className="bg-secondary/50"
+              />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">.kommo.com</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">API Token</label>
+            <div className="relative">
+              <Input
+                type={showKommoToken ? "text" : "password"}
+                placeholder="Cole seu API Token aqui..."
+                value={kommoToken}
+                onChange={(e) => setKommoToken(e.target.value)}
+                className="pr-10 bg-secondary/50 font-mono"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setShowKommoToken(!showKommoToken)}
+              >
+                {showKommoToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Gere em Kommo → Configurações → Integrações → Token de API
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Pipeline ID</label>
+            <Input
+              placeholder="Ex: 1234567"
+              value={kommoPipelineId}
+              onChange={(e) => setKommoPipelineId(e.target.value)}
+              className="bg-secondary/50 font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              ID numérico do pipeline. Encontre em Kommo → Configurações → Funis → clique no funil → veja a URL (ex: /leads/pipeline/1234567)
+            </p>
           </div>
         </CardContent>
       </Card>

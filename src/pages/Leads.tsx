@@ -1,11 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles } from "lucide-react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import type { Tables } from "@/integrations/supabase/types";
@@ -17,6 +22,8 @@ type Lead = Tables<"leads"> & {
   cidade?: string | null;
   fonte?: string | null;
 };
+
+type KommoStatus = "success" | "error" | "duplicate";
 
 const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -35,10 +42,30 @@ const Leads = () => {
   const [enrichProgress, setEnrichProgress] = useState("");
   const { toast } = useToast();
 
+  // Kommo export state
+  const [kommoStatuses, setKommoStatuses] = useState<Record<string, { status: KommoStatus; error?: string }>>(() => {
+    try {
+      const saved = localStorage.getItem("kommo_statuses");
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0 });
+  const [exportResult, setExportResult] = useState<{ success: number; duplicates: number; errors: Array<{ name: string; error: string }> }>({ success: 0, duplicates: 0, errors: [] });
+  const [kommoSubdomain, setKommoSubdomain] = useState("");
+
   useEffect(() => {
     fetchLeads();
     fetchTemplate();
+    fetchKommoSubdomain();
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("kommo_statuses", JSON.stringify(kommoStatuses));
+  }, [kommoStatuses]);
 
   const fetchLeads = async () => {
     const { data } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
@@ -48,6 +75,11 @@ const Leads = () => {
   const fetchTemplate = async () => {
     const { data } = await supabase.from("settings").select("value").eq("key", "whatsapp_template").maybeSingle();
     if (data?.value) setWhatsappTemplate(data.value);
+  };
+
+  const fetchKommoSubdomain = async () => {
+    const { data } = await supabase.from("settings").select("value").eq("key", "kommo_subdomain").maybeSingle();
+    if (data?.value) setKommoSubdomain(data.value);
   };
 
   const termos = useMemo(() => {
@@ -96,6 +128,8 @@ const Leads = () => {
   );
 
   const toggleSelect = (id: string) => {
+    // Don't allow selecting leads already exported to Kommo
+    if (kommoStatuses[id]?.status === "success") return;
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -104,10 +138,10 @@ const Leads = () => {
   };
 
   const toggleAll = () => {
-    if (selected.size === filtered.length) {
+    if (selected.size === filtered.filter(l => kommoStatuses[l.id]?.status !== "success").length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.map((l) => l.id)));
+      setSelected(new Set(filtered.filter(l => kommoStatuses[l.id]?.status !== "success").map((l) => l.id)));
     }
   };
 
@@ -178,7 +212,6 @@ const Leads = () => {
         if (error) throw error;
 
         const updates = data?.updates || {};
-        // Backward compat: if only nome_decisor returned at top level
         if (!updates.nome_decisor && data?.nome_decisor && data.nome_decisor !== "Não identificado") {
           updates.nome_decisor = data.nome_decisor;
         }
@@ -207,6 +240,78 @@ const Leads = () => {
       description: `${enriched} leads enriquecidos, ${failed} sem dados novos.`,
     });
   }, [selected, selectedLeads, filtered, toast]);
+
+  const handleExportKommo = async () => {
+    // Check if Kommo is configured
+    const { data: settings } = await supabase
+      .from("settings")
+      .select("key, value")
+      .in("key", ["kommo_subdomain", "kommo_api_token", "kommo_pipeline_id"]);
+
+    const map: Record<string, string> = {};
+    for (const s of settings || []) {
+      if (s.value) map[s.key] = s.value;
+    }
+
+    if (!map["kommo_subdomain"] || !map["kommo_api_token"] || !map["kommo_pipeline_id"]) {
+      setShowConfigModal(true);
+      return;
+    }
+
+    setKommoSubdomain(map["kommo_subdomain"]);
+    setShowConfirmModal(true);
+  };
+
+  const confirmExportKommo = async () => {
+    setShowConfirmModal(false);
+    setExporting(true);
+
+    const leadsToExport = selectedLeads.filter(l => kommoStatuses[l.id]?.status !== "success");
+    setExportProgress({ current: 0, total: leadsToExport.length });
+
+    const batchSize = 50;
+    let successCount = 0;
+    let duplicateCount = 0;
+    const errorsList: Array<{ name: string; error: string }> = [];
+    const newStatuses = { ...kommoStatuses };
+
+    for (let i = 0; i < leadsToExport.length; i += batchSize) {
+      const batch = leadsToExport.slice(i, i + batchSize);
+      setExportProgress({ current: i, total: leadsToExport.length });
+
+      try {
+        const { data, error } = await supabase.functions.invoke("export-kommo", {
+          body: { leads: batch },
+        });
+
+        if (error) throw error;
+
+        for (const result of data?.results || []) {
+          newStatuses[result.id] = { status: result.status, error: result.error };
+          if (result.status === "success") successCount++;
+          else if (result.status === "duplicate") duplicateCount++;
+          else {
+            const lead = leadsToExport.find(l => l.id === result.id);
+            errorsList.push({ name: lead?.nome_empresa || result.id, error: result.error || "Erro desconhecido" });
+          }
+        }
+      } catch (err: any) {
+        for (const lead of batch) {
+          newStatuses[lead.id] = { status: "error", error: err.message };
+          errorsList.push({ name: lead.nome_empresa, error: err.message || "Erro de rede" });
+        }
+      }
+    }
+
+    setKommoStatuses(newStatuses);
+    setExportProgress({ current: leadsToExport.length, total: leadsToExport.length });
+    setExportResult({ success: successCount, duplicates: duplicateCount, errors: errorsList });
+    setExporting(false);
+    setShowResultModal(true);
+    setSelected(new Set());
+  };
+
+  const selectableCount = filtered.filter(l => kommoStatuses[l.id]?.status !== "success").length;
 
   return (
     <div className="space-y-6">
@@ -278,7 +383,7 @@ const Leads = () => {
               <TableRow className="border-border/50">
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    checked={selectableCount > 0 && selected.size === selectableCount}
                     onCheckedChange={toggleAll}
                   />
                 </TableHead>
@@ -291,76 +396,226 @@ const Leads = () => {
                 <TableHead>Redes</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead>Fonte</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="w-20">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={12} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((lead) => (
-                  <TableRow key={lead.id} className="border-border/30 hover:bg-secondary/30">
-                    <TableCell>
-                      <Checkbox
-                        checked={selected.has(lead.id)}
-                        onCheckedChange={() => toggleSelect(lead.id)}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
-                    <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
-                    <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
-                    <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
-                    <TableCell>
-                      {lead.site ? (
-                        <a href={lead.site} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline flex items-center gap-1">
-                          <ExternalLink className="h-3 w-3" />
-                          <span className="truncate max-w-[120px]">{lead.site.replace(/https?:\/\//, "")}</span>
-                        </a>
-                      ) : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm max-w-[180px] truncate">{lead.endereco || "—"}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {lead.instagram && (
-                          <a href={lead.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300">
-                            <Instagram className="h-4 w-4" />
+                filtered.map((lead) => {
+                  const ks = kommoStatuses[lead.id];
+                  const isExported = ks?.status === "success";
+                  return (
+                    <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-70" : ""}`}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selected.has(lead.id)}
+                          onCheckedChange={() => toggleSelect(lead.id)}
+                          disabled={isExported}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
+                      <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
+                      <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
+                      <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
+                      <TableCell>
+                        {lead.site ? (
+                          <a href={lead.site} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            <span className="truncate max-w-[120px]">{lead.site.replace(/https?:\/\//, "")}</span>
                           </a>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[180px] truncate">{lead.endereco || "—"}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {lead.instagram && (
+                            <a href={lead.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300">
+                              <Instagram className="h-4 w-4" />
+                            </a>
+                          )}
+                          {lead.linkedin && (
+                            <a href={lead.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{lead.cidade || "—"}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${lead.fonte === "linkedin" ? "bg-blue-500/10 text-blue-400" : "bg-primary/10 text-primary"}`}>
+                          {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {ks?.status === "success" && (
+                          <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Kommo
+                          </Badge>
                         )}
-                        {lead.linkedin && (
-                          <a href={lead.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
+                        {ks?.status === "error" && (
+                          <Badge
+                            variant="outline"
+                            className="bg-destructive/10 text-destructive border-destructive/30 text-xs cursor-help"
+                            title={ks.error || "Erro ao exportar"}
+                          >
+                            <XCircle className="h-3 w-3 mr-1" />
+                            Erro
+                          </Badge>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{lead.cidade || "—"}</TableCell>
-                    <TableCell>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${lead.fonte === "linkedin" ? "bg-blue-500/10 text-blue-400" : "bg-primary/10 text-primary"}`}>
-                        {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte || "—"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openWhatsApp(lead)}
-                        className="text-green-400 hover:text-green-300 hover:bg-green-400/10"
-                        title="Abrir WhatsApp"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openWhatsApp(lead)}
+                          className="text-green-400 hover:text-green-300 hover:bg-green-400/10"
+                          title="Abrir WhatsApp"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Floating toolbar */}
+      {selected.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4 z-50">
+          <span className="text-sm font-medium">{selected.size} leads selecionados</span>
+          <Button
+            size="sm"
+            onClick={handleExportKommo}
+            disabled={exporting}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                Enviando {exportProgress.current}/{exportProgress.total}...
+              </>
+            ) : (
+              <>
+                <Building2 className="h-4 w-4 mr-1" />
+                Exportar para Kommo
+              </>
+            )}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+            <X className="h-4 w-4 mr-1" /> Cancelar
+          </Button>
+        </div>
+      )}
+
+      {/* Exporting progress bar */}
+      {exporting && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl shadow-2xl px-6 py-3 w-80 z-50">
+          <p className="text-sm mb-2 text-muted-foreground">Enviando {exportProgress.current} de {exportProgress.total}...</p>
+          <Progress value={exportProgress.total > 0 ? (exportProgress.current / exportProgress.total) * 100 : 0} />
+        </div>
+      )}
+
+      {/* Config missing modal */}
+      <Dialog open={showConfigModal} onOpenChange={setShowConfigModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-400" />
+              Configuração necessária
+            </DialogTitle>
+            <DialogDescription>
+              Para exportar leads para a Kommo, configure o Subdomínio, API Token e Pipeline ID em Configurações.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfigModal(false)}>Fechar</Button>
+            <Button onClick={() => { setShowConfigModal(false); window.location.href = "/settings"; }}>
+              Ir para Configurações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm export modal */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              Exportar para Kommo
+            </DialogTitle>
+            <DialogDescription className="space-y-2">
+              <p>Você está prestes a exportar <strong>{selectedLeads.filter(l => kommoStatuses[l.id]?.status !== "success").length}</strong> leads para a Kommo.</p>
+              <p className="text-xs text-muted-foreground">Leads duplicados serão automaticamente ignorados pela Kommo.</p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>Cancelar</Button>
+            <Button onClick={confirmExportKommo} className="bg-blue-600 hover:bg-blue-700 text-white">
+              Confirmar exportação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Result modal */}
+      <Dialog open={showResultModal} onOpenChange={setShowResultModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resultado da exportação</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {exportResult.success > 0 && (
+              <div className="flex items-center gap-2 text-green-400">
+                <CheckCircle className="h-5 w-5" />
+                <span>{exportResult.success} leads exportados com sucesso</span>
+              </div>
+            )}
+            {exportResult.duplicates > 0 && (
+              <div className="flex items-center gap-2 text-yellow-400">
+                <AlertTriangle className="h-5 w-5" />
+                <span>{exportResult.duplicates} leads já existiam (duplicatas)</span>
+              </div>
+            )}
+            {exportResult.errors.length > 0 && (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-destructive">
+                  <XCircle className="h-5 w-5" />
+                  <span>{exportResult.errors.length} leads com erro</span>
+                </div>
+                <div className="max-h-32 overflow-y-auto text-xs text-muted-foreground pl-7 space-y-1">
+                  {exportResult.errors.map((e, i) => (
+                    <p key={i}>• {e.name}: {e.error}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResultModal(false)}>Fechar</Button>
+            {kommoSubdomain && (
+              <Button
+                onClick={() => window.open(`https://${kommoSubdomain}.kommo.com`, "_blank")}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Ver no Kommo
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

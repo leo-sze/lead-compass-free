@@ -34,11 +34,11 @@ const GoogleSearch = () => {
     }
 
     setLoading(true);
-    setProgress(10);
+    setProgress(5);
     setStatusText("Iniciando busca no Google Maps...");
 
     try {
-      setProgress(30);
+      setProgress(15);
       setStatusText("Consultando Google Maps...");
 
       const { data, error } = await supabase.functions.invoke("extract-leads", {
@@ -53,15 +53,16 @@ const GoogleSearch = () => {
 
       if (error) throw error;
 
-      setProgress(80);
-      setStatusText("Salvando leads...");
-
       const leads = data?.leads || [];
-      let newCount = 0;
-      let dupCount = 0;
+
+      setProgress(35);
+      setStatusText(`${leads.length} leads encontrados. Salvando...`);
+
+      // Save leads to DB and collect IDs + transient data
+      const savedLeads: Array<{ id: string; transient: any }> = [];
 
       for (const lead of leads) {
-        const { error: insertError } = await supabase.from("leads").upsert(
+        const { data: saved, error: insertError } = await supabase.from("leads").upsert(
           {
             nome_empresa: lead.nome_empresa,
             telefone: lead.telefone || null,
@@ -72,23 +73,81 @@ const GoogleSearch = () => {
             cnpj: lead.cnpj || null,
             query_origem: `${query} - ${location}`,
             termo_pesquisa: query.trim(),
-            cidade: lead.cidade || null,
+            cidade: lead.cidade || location.trim(),
             fonte: "google",
-            score: lead.score ?? null,
-            lead_quality: lead.lead_quality ?? null,
-            score_breakdown: lead.score_breakdown ?? null,
+            // Store scoring input for re-analysis later
+            score_breakdown: {
+              rating: lead.rating,
+              total_reviews: lead.total_reviews,
+              price_level: lead.price_level,
+              categoria: lead.categoria,
+              reviews: lead.reviews || [],
+              bairro: lead.bairro,
+              estado: lead.estado,
+            },
           } as any,
           { onConflict: "nome_empresa,telefone" }
-        );
-        if (insertError) dupCount++;
-        else newCount++;
+        ).select("id").maybeSingle();
+
+        if (saved) {
+          savedLeads.push({ id: saved.id, transient: lead });
+        }
+      }
+
+      // Score leads via AI in batches of 5
+      setProgress(40);
+      setStatusText("Analisando qualidade via IA...");
+
+      const SCORE_BATCH = 5;
+      let scored = 0;
+
+      for (let i = 0; i < savedLeads.length; i += SCORE_BATCH) {
+        const batch = savedLeads.slice(i, i + SCORE_BATCH);
+
+        const scorePromises = batch.map(async ({ id, transient: t }) => {
+          try {
+            const { data: scoreData, error: scoreError } = await supabase.functions.invoke("score-lead", {
+              body: {
+                nome_empresa: t.nome_empresa,
+                endereco: t.endereco,
+                bairro: t.bairro,
+                cidade: t.cidade || location.trim(),
+                estado: t.estado,
+                rating: t.rating,
+                total_reviews: t.total_reviews,
+                website: t.site,
+                price_level: t.price_level,
+                categoria: t.categoria,
+                reviews: t.reviews || [],
+              },
+            });
+
+            if (!scoreError && scoreData && !scoreData.error) {
+              await supabase.from("leads").update({
+                score: scoreData.score,
+                lead_quality: scoreData.classificacao,
+                justificativa: scoreData.justificativa,
+                sinais_positivos: scoreData.sinais_positivos,
+                sinais_negativos: scoreData.sinais_negativos,
+              } as any).eq("id", id);
+            }
+          } catch (e) {
+            console.error("Score error for", t.nome_empresa, e);
+          }
+        });
+
+        await Promise.all(scorePromises);
+        scored += batch.length;
+        const pct = 40 + Math.round((scored / savedLeads.length) * 55);
+        setProgress(pct);
+        setStatusText(`Analisando qualidade via IA... ${scored}/${savedLeads.length}`);
       }
 
       setProgress(100);
       setStatusText("Concluído!");
       toast({
         title: "Extração concluída!",
-        description: `${leads.length} leads encontrados. ${newCount} novos, ${dupCount} duplicados.`,
+        description: `${leads.length} leads encontrados e analisados por IA.`,
       });
       setTimeout(() => navigate("/leads"), 1500);
     } catch (err: any) {

@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -18,77 +19,84 @@ import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 
-type ScoreBreakdown = Record<string, number>;
-
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
   cidade?: string | null;
   fonte?: string | null;
   score?: number | null;
   lead_quality?: string | null;
-  score_breakdown?: ScoreBreakdown | null;
+  score_breakdown?: any;
+  justificativa?: string | null;
+  sinais_positivos?: string[] | null;
+  sinais_negativos?: string[] | null;
 };
 
 type QualityFilter = "all" | "quente" | "morno" | "frio" | "desqualificado";
 
-const breakdownLabels: Record<string, { label: string; max: number }> = {
-  reviews: { label: "Reviews", max: 25 },
-  nota: { label: "Nota", max: 20 },
-  website: { label: "Website", max: 20 },
-  fotos: { label: "Fotos", max: 15 },
-  horarios: { label: "Horários", max: 10 },
-  preco: { label: "Nível de preço", max: 10 },
+const qualityConfig: Record<string, { label: string; className: string }> = {
+  quente: { label: "Quente", className: "bg-green-500/10 text-green-400 border-green-500/30" },
+  morno: { label: "Morno", className: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
+  frio: { label: "Frio", className: "bg-red-500/10 text-red-400 border-red-500/30" },
+  desqualificado: { label: "Desqualificado", className: "bg-muted/50 text-muted-foreground border-border" },
 };
 
-const QualityBadgeWithHover = ({ quality, score, breakdown }: { quality: string | null | undefined; score: number | null | undefined; breakdown: ScoreBreakdown | null | undefined }) => {
-  if (!quality) return null;
-  const config: Record<string, { label: string; className: string }> = {
-    quente: { label: "Quente", className: "bg-green-500/10 text-green-400 border-green-500/30" },
-    morno: { label: "Morno", className: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
-    frio: { label: "Frio", className: "bg-red-500/10 text-red-400 border-red-500/30" },
-    desqualificado: { label: "Desqualificado", className: "bg-muted/50 text-muted-foreground border-border" },
-  };
-  const c = config[quality];
+const QualityBadgeWithHover = ({ lead, isScoring }: { lead: Lead; isScoring?: boolean }) => {
+  if (isScoring) {
+    return <Skeleton className="h-5 w-20 rounded-full" />;
+  }
+
+  const quality = lead.lead_quality;
+  const score = lead.score;
+  if (!quality) return <span className="text-xs text-muted-foreground">—</span>;
+
+  const c = qualityConfig[quality];
   if (!c) return null;
+
+  const justificativa = (lead as any).justificativa;
+  const sinaisPositivos: string[] = (lead as any).sinais_positivos || [];
+  const sinaisNegativos: string[] = (lead as any).sinais_negativos || [];
+  const hasDetails = justificativa || sinaisPositivos.length > 0 || sinaisNegativos.length > 0;
 
   const badge = (
     <Badge variant="outline" className={`${c.className} text-xs cursor-help`}>
-      {c.label} {score != null ? `(${score})` : ""}
+      {score != null ? `${score} ` : ""}{c.label}
     </Badge>
   );
 
-  if (!breakdown) return badge;
+  if (!hasDetails) return badge;
 
   return (
     <HoverCard openDelay={200}>
       <HoverCardTrigger asChild>
-        <span className="inline-flex cursor-help">
-          <Badge variant="outline" className={`${c.className} text-xs`}>
-            {c.label} {score != null ? `(${score})` : ""}
-          </Badge>
-        </span>
+        <span className="inline-flex cursor-help">{badge}</span>
       </HoverCardTrigger>
-      <HoverCardContent className="w-64 p-3" side="right">
-        <p className="text-sm font-semibold mb-2">Pontuação: {score ?? 0}/100</p>
-        <div className="space-y-1.5">
-          {Object.entries(breakdownLabels).map(([key, { label, max }]) => {
-            const val = breakdown[key] ?? 0;
-            return (
-              <div key={key} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{label}</span>
-                <div className="flex items-center gap-2">
-                  <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${val > 0 ? "bg-accent" : "bg-muted"}`}
-                      style={{ width: `${max > 0 ? (val / max) * 100 : 0}%` }}
-                    />
-                  </div>
-                  <span className="font-mono w-8 text-right">{val}/{max}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <HoverCardContent className="w-80 p-4" side="right">
+        <p className="text-sm font-semibold mb-2">
+          Score: {score ?? 0}/100 — {c.label}
+        </p>
+        {justificativa && (
+          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">{justificativa}</p>
+        )}
+        {sinaisPositivos.length > 0 && (
+          <div className="mb-2">
+            <p className="text-xs font-medium text-green-400 mb-1">✅ Sinais positivos</p>
+            <div className="space-y-0.5">
+              {sinaisPositivos.map((s, i) => (
+                <p key={i} className="text-xs text-muted-foreground pl-1">• {s}</p>
+              ))}
+            </div>
+          </div>
+        )}
+        {sinaisNegativos.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-red-400 mb-1">⚠️ Sinais negativos</p>
+            <div className="space-y-0.5">
+              {sinaisNegativos.map((s, i) => (
+                <p key={i} className="text-xs text-muted-foreground pl-1">• {s}</p>
+              ))}
+            </div>
+          </div>
+        )}
       </HoverCardContent>
     </HoverCard>
   );
@@ -112,6 +120,7 @@ const Leads = () => {
   );
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
+  const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Kommo export state
@@ -175,12 +184,10 @@ const Leads = () => {
       if (qualityFilter === "desqualificado") {
         result = result.filter((l) => l.lead_quality === "desqualificado");
       } else {
-        // Hide desqualificado by default unless explicitly selected
         result = result.filter((l) => l.lead_quality !== "desqualificado");
         result = result.filter((l) => l.lead_quality === qualityFilter);
       }
     } else {
-      // "all" hides desqualificado by default
       result = result.filter((l) => l.lead_quality !== "desqualificado");
     }
     if (filter) {
@@ -191,19 +198,12 @@ const Leads = () => {
           l.endereco?.toLowerCase().includes(f)
       );
     }
-    if (selectedTermo !== "all") {
-      result = result.filter((l) => l.termo_pesquisa === selectedTermo);
-    }
-    if (selectedCidade !== "all") {
-      result = result.filter((l) => l.cidade === selectedCidade);
-    }
-    if (selectedFonte !== "all") {
-      result = result.filter((l) => l.fonte === selectedFonte);
-    }
+    if (selectedTermo !== "all") result = result.filter((l) => l.termo_pesquisa === selectedTermo);
+    if (selectedCidade !== "all") result = result.filter((l) => l.cidade === selectedCidade);
+    if (selectedFonte !== "all") result = result.filter((l) => l.fonte === selectedFonte);
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
-    // Sort by score descending
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
   }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, qualityFilter]);
@@ -214,7 +214,6 @@ const Leads = () => {
   );
 
   const toggleSelect = (id: string) => {
-    // Don't allow selecting leads already exported to Kommo
     if (kommoStatuses[id]?.status === "success") return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -246,9 +245,10 @@ const Leads = () => {
 
   const exportCSV = () => {
     const toExport = selected.size > 0 ? selectedLeads : leads;
-    const headers = ["Nome", "Score", "Qualidade", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
+    const headers = ["Nome", "Score", "Qualidade", "Justificativa", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
     const rows = toExport.map((l) => [
-      l.nome_empresa, String(l.score ?? ""), l.lead_quality || "", (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
+      l.nome_empresa, String(l.score ?? ""), l.lead_quality || "", (l as any).justificativa || "",
+      (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
       l.instagram || "", l.linkedin || "", l.termo_pesquisa || "", l.cidade || "", l.fonte || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -327,8 +327,53 @@ const Leads = () => {
     });
   }, [selected, selectedLeads, filtered, toast]);
 
+  const reAnalyzeLead = async (lead: Lead) => {
+    const input = lead.score_breakdown as any;
+    setReAnalyzing((prev) => new Set(prev).add(lead.id));
+
+    try {
+      const { data, error } = await supabase.functions.invoke("score-lead", {
+        body: {
+          nome_empresa: lead.nome_empresa,
+          endereco: lead.endereco,
+          bairro: input?.bairro || null,
+          cidade: lead.cidade,
+          estado: input?.estado || null,
+          rating: input?.rating || null,
+          total_reviews: input?.total_reviews || null,
+          website: lead.site,
+          price_level: input?.price_level || null,
+          categoria: input?.categoria || null,
+          reviews: input?.reviews || [],
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      const updates = {
+        score: data.score,
+        lead_quality: data.classificacao,
+        justificativa: data.justificativa,
+        sinais_positivos: data.sinais_positivos,
+        sinais_negativos: data.sinais_negativos,
+      };
+
+      await supabase.from("leads").update(updates as any).eq("id", lead.id);
+      setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
+      toast({ title: `Score atualizado: ${data.score} (${data.classificacao})` });
+    } catch (e: any) {
+      toast({ title: "Erro ao re-analisar", description: e.message, variant: "destructive" });
+    } finally {
+      setReAnalyzing((prev) => {
+        const next = new Set(prev);
+        next.delete(lead.id);
+        return next;
+      });
+    }
+  };
+
   const handleExportKommo = async () => {
-    // Check if Kommo is configured
     const { data: settings } = await supabase
       .from("settings")
       .select("key, value")
@@ -511,7 +556,7 @@ const Leads = () => {
                 <TableHead>Cidade</TableHead>
                 <TableHead>Fonte</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="w-20">Ações</TableHead>
+                <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -525,6 +570,7 @@ const Leads = () => {
                 filtered.map((lead) => {
                   const ks = kommoStatuses[lead.id];
                   const isExported = ks?.status === "success";
+                  const isScoring = reAnalyzing.has(lead.id);
                   return (
                     <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-70" : ""}`}>
                       <TableCell>
@@ -535,7 +581,9 @@ const Leads = () => {
                         />
                       </TableCell>
                       <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
-                      <TableCell><QualityBadgeWithHover quality={lead.lead_quality} score={lead.score} breakdown={(lead as any).score_breakdown} /></TableCell>
+                      <TableCell>
+                        <QualityBadgeWithHover lead={lead} isScoring={isScoring} />
+                      </TableCell>
                       <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
                       <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
                       <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
@@ -587,15 +635,31 @@ const Leads = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openWhatsApp(lead)}
-                          className="text-green-400 hover:text-green-300 hover:bg-green-400/10"
-                          title="Abrir WhatsApp"
-                        >
-                          <MessageCircle className="h-4 w-4" />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openWhatsApp(lead)}
+                            className="text-green-400 hover:text-green-300 hover:bg-green-400/10 h-8 w-8"
+                            title="Abrir WhatsApp"
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => reAnalyzeLead(lead)}
+                            disabled={isScoring}
+                            className="text-accent hover:text-accent/80 hover:bg-accent/10 h-8 w-8"
+                            title="Re-analisar via IA"
+                          >
+                            {isScoring ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

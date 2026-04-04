@@ -9,6 +9,7 @@ import GoogleSearch from "./pages/GoogleSearch";
 import LinkedInSearch from "./pages/LinkedInSearch";
 import Leads from "./pages/Leads";
 import SettingsPage from "./pages/SettingsPage";
+import FindContacts from "./pages/FindContacts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin } from "lucide-react";
+import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin, Send } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +95,7 @@ export default function FindContacts() {
   const [summary, setSummary] = useState<{ foundSite: number; foundPlaces: number; notFound: number } | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -220,6 +222,26 @@ export default function FindContacts() {
     URL.revokeObjectURL(url);
   }, [contacts]);
 
+  const handleSendToLeads = useCallback(async () => {
+    if (contacts.length === 0) return;
+    const leadsToInsert = contacts.map(c => ({
+      nome_empresa: c.companyName || "Sem nome",
+      nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
+      telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
+      site: c.website || null,
+      cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
+      fonte: "Apollo CSV",
+    }));
+
+    const { error } = await supabase.from("leads").insert(leadsToInsert);
+    if (error) {
+      toast({ title: "Erro ao enviar leads", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `${leadsToInsert.length} leads enviados com sucesso!` });
+    navigate("/leads");
+  }, [contacts, toast, navigate]);
+
   const statusBadge = (status: Contact["status"]) => {
     switch (status) {
       case "has_phone":
@@ -302,6 +324,10 @@ export default function FindContacts() {
             <Button variant="outline" size="sm" onClick={handleExport} disabled={contacts.length === 0}>
               <Download className="mr-2 h-4 w-4" />
               Exportar CSV
+            </Button>
+            <Button variant="secondary" size="sm" onClick={handleSendToLeads} disabled={contacts.length === 0 || searching}>
+              <Send className="mr-2 h-4 w-4" />
+              Enviar para Leads
             </Button>
             <Button onClick={handleSearch} disabled={searching || pendingCount === 0} size="sm">
               {searching ? (

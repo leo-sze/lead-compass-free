@@ -1,47 +1,49 @@
 
 
-# Melhorar qualidade da busca LinkedIn
+# Refatorar enrich-lead: estratégia de 3 estágios (CNPJ → BrasilAPI → IA)
 
-## Problema
+## Resumo
 
-A extração de empresa via regex no `parseLinkedInResult` é fundamentalmente frágil. O título do LinkedIn vem em formatos muito variados e o parser atual extrai fragmentos de texto aleatórios como nome de empresa (ex: "in", "ging", "r", "says: 'A rising tide lifts all boats'", "LinkedIn", "Carreiras"). Além disso, o filtro de relevância só verifica se o termo da busca aparece no título/snippet, o que é insuficiente.
+Substituir a lógica atual (múltiplas buscas paralelas + IA para tudo) por 3 estágios sequenciais e determinísticos. O nome_decisor passa a vir primariamente da BrasilAPI (QSA/quadro societário), que é gratuita e confiável. A IA só entra como último recurso.
 
-## Solução
+## Estágio 1 — Encontrar CNPJ
+- Busca Firecrawl: `"{nome_empresa}" "{cidade}" CNPJ`
+- Regex para extrair CNPJ do texto retornado
+- Fallback: segunda busca com `site:casadosdados.com.br`
+- CNPJ salvo no campo `cnpj` dos updates
 
-Substituir o parser regex por uma chamada à AI (Lovable AI / Gemini Flash Lite) para extrair dados estruturados de cada resultado do LinkedIn, e adicionar validação de relevância mais rigorosa.
+## Estágio 2 — BrasilAPI (QSA)
+- `GET https://brasilapi.com.br/api/cnpj/v1/{cnpj_limpo}` (sem auth)
+- Seleciona decisor do array `qsa` por prioridade de qualificação (Administrador > Diretor/Presidente > Sócio > primeiro)
+- Aproveita telefone, endereço, cidade da resposta se vazios
+- Ignora empresa com situação "BAIXADA" ou "INAPTA"
+- Retry 1x com 2s delay em caso de 429
 
-### 1. Usar AI para parsear resultados LinkedIn (edge function)
+## Estágio 3 — Fallback IA (só se decisor ainda vazio)
+- UMA busca Firecrawl: `"{nome_empresa}" "{cidade}" fundador OR proprietário OR CEO OR diretor`
+- Chamada Gemini com prompt restritivo para extrair apenas nome de pessoa real
+- Se retornar null, deixa nome_decisor vazio
 
-Em vez de regex, enviar um batch dos resultados brutos (title + snippet + link) para a AI com um prompt pedindo:
-- `nome_decisor`: nome da pessoa
-- `nome_empresa`: empresa onde trabalha (null se não identificável)
-- `cargo`: cargo/função
-- `relevante`: boolean — se o resultado é relevante para o job title + industry + location buscados
+## Campos não-decisor (site, instagram, linkedin)
+- Mantém a lógica existente de busca web + IA para esses campos, executada em paralelo com o Estágio 1
+- A IA do Estágio 3 NÃO substitui essa parte — ela só busca nome_decisor
 
-Processar em batches de ~10 resultados por chamada para eficiência.
+## O que muda no arquivo
 
-### 2. Filtro de relevância rigoroso
+| Aspecto | Antes | Depois |
+|---------|-------|--------|
+| Busca de decisor | 7 buscas paralelas + IA genérica | CNPJ → BrasilAPI → 1 busca + IA focada |
+| Fonte principal | Scraping genérico | BrasilAPI (dados oficiais da Receita) |
+| Chamadas Firecrawl | 7 em paralelo | 2-3 sequenciais (CNPJ) + 1-2 para outros campos |
+| Input schema | Sem campo cnpj | Adiciona `cnpj` opcional ao BodySchema |
+| Output | Mesmo formato | Mesmo formato, `cnpj` adicionado ao `updates` |
 
-- Descartar resultados onde a AI retorna `relevante: false`
-- Descartar resultados onde `nome_empresa` é null ou tem menos de 3 caracteres
-- Descartar empresas que são claramente genéricas ("LinkedIn", single words sem significado)
+## Detalhes técnicos
 
-### 3. Melhorar construção da query
-
-- Remover a segunda query com termos de cargo em português (proprietário OR dono OR CEO...) que polui os resultados
-- Usar uma query mais focada: `site:linkedin.com/in "{jobTitle}" "{industry}" "{location}"`
-- Se keywords existir, adicionar como filtro adicional
-
-### Arquivos a editar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/extract-leads/index.ts` | Substituir `parseLinkedInResult` por chamada AI em batch; simplificar queries; adicionar validação de relevância |
-
-### Detalhes técnicos
-
-- Usar `google/gemini-2.5-flash-lite` via `ai.gateway.lovable.dev` (sem API key extra)
-- Precisa do `LOVABLE_API_KEY` (já disponível como env var nas edge functions)
-- Cada batch de ~10 resultados = 1 chamada AI com tool calling retornando array de objetos
-- Latência estimada: +2-3s por batch, aceitável dado que a busca já leva ~10s
+- Novo campo no BodySchema: `cnpj: z.string().nullable().optional()`
+- Nova função `findCnpj(nome, cidade, apiKey)` → string | null
+- Nova função `queryBrasilApi(cnpj)` → objeto com qsa, telefone, endereço etc.
+- Nova função `selectDecisor(qsa)` → nome do decisor
+- Busca de campos gerais (site, instagram, linkedin, telefone) continua via scrape + IA como antes, mas em paralelo e sem incluir nome_decisor
+- Logging com prefixos `[CNPJ]`, `[QSA]`, `[IA]`
 

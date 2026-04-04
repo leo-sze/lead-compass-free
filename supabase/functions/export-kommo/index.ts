@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
         if (lead.site) {
           companyFields.push({
             field_code: "WEB",
-            values: [{ value: lead.site, enum_code: "WORK" }],
+            values: [{ value: lead.site }],
           });
         }
 

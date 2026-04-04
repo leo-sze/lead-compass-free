@@ -52,6 +52,7 @@ const SettingsPage = () => {
       await saveSetting("api_key", apiKey);
       await saveSetting("api_provider", provider);
       await saveSetting("whatsapp_template", whatsappTemplate);
+      await saveSetting("google_places_api_key", googlePlacesKey);
       toast({ title: "Configurações salvas!" });
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });

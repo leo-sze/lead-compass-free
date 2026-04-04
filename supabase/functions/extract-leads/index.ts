@@ -258,7 +258,50 @@ async function fetchSearchApi(query: string, apiKey: string, page: number, engin
   return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
 }
 
+function calculateLeadScore(r: any): { score: number; lead_quality: string } {
+  let score = 0;
+  const userRatingCount = r.user_ratings_total ?? r.userRatingCount ?? r.reviews ?? 0;
+  const rating = r.rating ?? 0;
+  const websiteUri = r.website || r.websiteUri || null;
+  const photos = r.photos || r.thumbnail ? (r.photos || [{ ref: true }]) : [];
+  const photosCount = Array.isArray(photos) ? photos.length : 0;
+  const openingHours = r.regularOpeningHours || r.opening_hours || null;
+  const periodsCount = openingHours?.periods?.length ?? (openingHours?.open_now !== undefined ? 6 : 0);
+  const priceLevel = r.price_level ?? r.priceLevel ?? 0;
+
+  // Reviews
+  if (userRatingCount < 10) return { score: 0, lead_quality: "desqualificado" };
+  if (userRatingCount >= 100) score += 25;
+  else if (userRatingCount >= 30) score += 15;
+
+  // Rating
+  if (rating > 0 && rating < 3.8) return { score: 0, lead_quality: "desqualificado" };
+  if (rating >= 4.2) score += 20;
+
+  // Website
+  if (websiteUri) score += 20;
+
+  // Photos
+  if (photosCount >= 10) score += 15;
+  else if (photosCount >= 3) score += 5;
+
+  // Opening hours
+  if (periodsCount >= 6) score += 10;
+
+  // Price level
+  if (priceLevel >= 2) score += 10;
+
+  // Classify
+  let lead_quality: string;
+  if (score >= 70) lead_quality = "quente";
+  else if (score >= 40) lead_quality = "morno";
+  else lead_quality = "frio";
+
+  return { score, lead_quality };
+}
+
 function parseGoogleMapsResult(r: any) {
+  const { score, lead_quality } = calculateLeadScore(r);
   return {
     nome_empresa: r.title || r.name || "Sem nome",
     telefone: r.phone || null,
@@ -267,6 +310,8 @@ function parseGoogleMapsResult(r: any) {
     instagram: extractSocialLink(r, "instagram"),
     linkedin: extractSocialLink(r, "linkedin"),
     nome_decisor: null,
+    score,
+    lead_quality,
   };
 }
 

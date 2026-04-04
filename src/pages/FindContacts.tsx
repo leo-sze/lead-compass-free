@@ -95,6 +95,7 @@ export default function FindContacts() {
   const [summary, setSummary] = useState<{ foundSite: number; foundPlaces: number; notFound: number } | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {

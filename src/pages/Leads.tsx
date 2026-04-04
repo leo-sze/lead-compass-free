@@ -451,6 +451,7 @@ const Leads = () => {
                   />
                 </TableHead>
                 <TableHead>Empresa</TableHead>
+                <TableHead>Score</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>
@@ -466,7 +467,7 @@ const Leads = () => {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={13} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>

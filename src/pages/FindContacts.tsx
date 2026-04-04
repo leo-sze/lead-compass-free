@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -99,8 +99,15 @@ export default function FindContacts() {
   const [searching, setSearching] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [summary, setSummary] = useState<{ found: number; notFound: number } | null>(null);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Check if Google Places API key is configured
+  useEffect(() => {
+    supabase.from("settings").select("value").eq("key", "google_places_api_key").maybeSingle()
+      .then(({ data }) => setHasApiKey(!!(data?.value)));
+  }, []);
 
   const missingCount = contacts.filter(c => c.status === "pending" || c.status === "searching").length;
   const pendingCount = contacts.filter(c => c.status === "pending").length;
@@ -251,6 +258,18 @@ export default function FindContacts() {
         <h1 className="text-2xl font-bold">Encontrar Contatos</h1>
         <p className="text-muted-foreground text-sm">Importe um CSV do Apollo e encontre telefones automaticamente via Google Places</p>
       </div>
+
+      {hasApiKey === false && (
+        <Card className="border-destructive/50 bg-destructive/10">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <div>
+              <p className="font-medium text-sm">Google Places API Key não configurada</p>
+              <p className="text-muted-foreground text-xs">Vá em <a href="/settings" className="text-primary underline">Configurações</a> e adicione sua chave. A API tem $200/mês de crédito gratuito.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {contacts.length === 0 ? (
         <Card className="border-dashed border-2 border-border/50 bg-card/50">

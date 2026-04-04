@@ -439,6 +439,7 @@ const Leads = () => {
         })}
       </div>
 
+      <Card className="border-border/50 bg-card/80">
         <CardContent className="p-0">
           <Table>
             <TableHeader>

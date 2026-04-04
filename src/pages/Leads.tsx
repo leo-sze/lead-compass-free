@@ -61,7 +61,13 @@ const QualityBadgeWithHover = ({ quality, score, breakdown }: { quality: string 
 
   return (
     <HoverCard openDelay={200}>
-      <HoverCardTrigger asChild>{badge}</HoverCardTrigger>
+      <HoverCardTrigger asChild>
+        <span className="inline-flex cursor-help">
+          <Badge variant="outline" className={`${c.className} text-xs`}>
+            {c.label} {score != null ? `(${score})` : ""}
+          </Badge>
+        </span>
+      </HoverCardTrigger>
       <HoverCardContent className="w-64 p-3" side="right">
         <p className="text-sm font-semibold mb-2">Pontuação: {score ?? 0}/100</p>
         <div className="space-y-1.5">

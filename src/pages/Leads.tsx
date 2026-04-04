@@ -412,7 +412,33 @@ const Leads = () => {
         onHasInstagramChange={setHasInstagram}
       />
 
-      <Card className="border-border/50 bg-card/80">
+      {/* Quality filter tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { value: "quente" as QualityFilter, label: "🔥 Quente", cls: "bg-green-500/10 text-green-400 border-green-500/30" },
+          { value: "morno" as QualityFilter, label: "🟡 Morno", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
+          { value: "frio" as QualityFilter, label: "🔵 Frio", cls: "bg-red-500/10 text-red-400 border-red-500/30" },
+          { value: "all" as QualityFilter, label: "Todos", cls: "bg-secondary text-foreground border-border" },
+          { value: "desqualificado" as QualityFilter, label: "Desqualificados", cls: "bg-muted/50 text-muted-foreground border-border" },
+        ]).map((tab) => {
+          const count = leads.filter((l) => {
+            if (tab.value === "all") return l.lead_quality !== "desqualificado";
+            return l.lead_quality === tab.value;
+          }).length;
+          return (
+            <Button
+              key={tab.value}
+              variant="outline"
+              size="sm"
+              onClick={() => setQualityFilter(tab.value)}
+              className={`${qualityFilter === tab.value ? tab.cls + " ring-1 ring-accent" : "bg-secondary/30 text-muted-foreground border-border/50"}`}
+            >
+              {tab.label} ({count})
+            </Button>
+          );
+        })}
+      </div>
+
         <CardContent className="p-0">
           <Table>
             <TableHeader>

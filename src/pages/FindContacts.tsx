@@ -104,10 +104,10 @@ export default function FindContacts() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Check if Google Places API key is configured
-  useState(() => {
+  useEffect(() => {
     supabase.from("settings").select("value").eq("key", "google_places_api_key").maybeSingle()
       .then(({ data }) => setHasApiKey(!!(data?.value)));
-  });
+  }, []);
 
   const missingCount = contacts.filter(c => c.status === "pending" || c.status === "searching").length;
   const pendingCount = contacts.filter(c => c.status === "pending").length;

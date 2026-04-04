@@ -133,7 +133,7 @@ const SettingsPage = () => {
             Google Places API
           </CardTitle>
           <CardDescription>
-            Usada para encontrar telefones de empresas. Tem $200/mês de crédito gratuito.{" "}
+            Usado apenas como fallback (primeiro busca no site da empresa). A API oferece 5.000 buscas gratuitas/mês (tier Pro) a partir de março/2025.{" "}
             <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" className="text-accent hover:underline">
               Obter chave no Google Cloud
             </a>

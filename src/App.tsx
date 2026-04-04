@@ -26,6 +26,7 @@ const App = () => (
             <Route path="/google-search" element={<GoogleSearch />} />
             <Route path="/linkedin-search" element={<LinkedInSearch />} />
             <Route path="/leads" element={<Leads />} />
+            <Route path="/find-contacts" element={<FindContacts />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

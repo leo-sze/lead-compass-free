@@ -23,10 +23,12 @@ export type Database = {
           fonte: string | null
           id: string
           instagram: string | null
+          lead_quality: string | null
           linkedin: string | null
           nome_decisor: string | null
           nome_empresa: string
           query_origem: string | null
+          score: number | null
           site: string | null
           telefone: string | null
           termo_pesquisa: string | null
@@ -39,10 +41,12 @@ export type Database = {
           fonte?: string | null
           id?: string
           instagram?: string | null
+          lead_quality?: string | null
           linkedin?: string | null
           nome_decisor?: string | null
           nome_empresa: string
           query_origem?: string | null
+          score?: number | null
           site?: string | null
           telefone?: string | null
           termo_pesquisa?: string | null
@@ -55,10 +59,12 @@ export type Database = {
           fonte?: string | null
           id?: string
           instagram?: string | null
+          lead_quality?: string | null
           linkedin?: string | null
           nome_decisor?: string | null
           nome_empresa?: string
           query_origem?: string | null
+          score?: number | null
           site?: string | null
           telefone?: string | null
           termo_pesquisa?: string | null

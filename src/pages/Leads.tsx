@@ -44,6 +44,8 @@ const qualityBadge = (quality: string | null | undefined, score: number | null |
   );
 };
 
+type KommoStatus = "success" | "error" | "duplicate";
+
 const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());

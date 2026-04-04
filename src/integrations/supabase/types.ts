@@ -23,6 +23,7 @@ export type Database = {
           fonte: string | null
           id: string
           instagram: string | null
+          justificativa: string | null
           lead_quality: string | null
           linkedin: string | null
           nome_decisor: string | null
@@ -30,6 +31,8 @@ export type Database = {
           query_origem: string | null
           score: number | null
           score_breakdown: Json | null
+          sinais_negativos: Json | null
+          sinais_positivos: Json | null
           site: string | null
           telefone: string | null
           termo_pesquisa: string | null
@@ -42,6 +45,7 @@ export type Database = {
           fonte?: string | null
           id?: string
           instagram?: string | null
+          justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
           nome_decisor?: string | null
@@ -49,6 +53,8 @@ export type Database = {
           query_origem?: string | null
           score?: number | null
           score_breakdown?: Json | null
+          sinais_negativos?: Json | null
+          sinais_positivos?: Json | null
           site?: string | null
           telefone?: string | null
           termo_pesquisa?: string | null
@@ -61,6 +67,7 @@ export type Database = {
           fonte?: string | null
           id?: string
           instagram?: string | null
+          justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
           nome_decisor?: string | null
@@ -68,6 +75,8 @@ export type Database = {
           query_origem?: string | null
           score?: number | null
           score_breakdown?: Json | null
+          sinais_negativos?: Json | null
+          sinais_positivos?: Json | null
           site?: string | null
           telefone?: string | null
           termo_pesquisa?: string | null

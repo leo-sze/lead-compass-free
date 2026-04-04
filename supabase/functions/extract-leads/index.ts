@@ -184,12 +184,10 @@ Regras:
           const extracted = args.leads || [];
 
           for (const item of extracted) {
-            // Strict validation
             if (!item.relevante) continue;
             if (!item.nome_empresa || item.nome_empresa === "null" || item.nome_empresa.length < 3) continue;
             if (!item.nome_decisor || item.nome_decisor === "null") continue;
 
-            // Find original result for the link
             const original = batch[item.idx];
             if (!original) continue;
 
@@ -258,67 +256,80 @@ async function fetchSearchApi(query: string, apiKey: string, page: number, engin
   return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
 }
 
-function calculateLeadScore(r: any): { score: number; lead_quality: string; score_breakdown: Record<string, number> } {
-  let score = 0;
-  const breakdown: Record<string, number> = {};
-  const userRatingCount = r.user_ratings_total ?? r.userRatingCount ?? r.reviews ?? 0;
-  const rating = r.rating ?? 0;
-  const websiteUri = r.website || r.websiteUri || null;
-  const photos = r.photos || r.thumbnail ? (r.photos || [{ ref: true }]) : [];
-  const photosCount = Array.isArray(photos) ? photos.length : 0;
-  const openingHours = r.regularOpeningHours || r.opening_hours || null;
-  const periodsCount = openingHours?.periods?.length ?? (openingHours?.open_now !== undefined ? 6 : 0);
-  const priceLevel = r.price_level ?? r.priceLevel ?? 0;
+// Fetch reviews for a place using SerpApi or SearchApi
+async function fetchPlaceReviews(
+  placeId: string,
+  apiKey: string,
+  provider: string
+): Promise<Array<{ text: string; rating: number }>> {
+  try {
+    let url: URL;
+    if (provider === "serpapi") {
+      url = new URL("https://serpapi.com/search.json");
+      url.searchParams.set("engine", "google_maps_reviews");
+      url.searchParams.set("place_id", placeId);
+      url.searchParams.set("api_key", apiKey);
+      url.searchParams.set("hl", "pt-br");
+      url.searchParams.set("sort_by", "newestFirst");
+    } else {
+      url = new URL("https://www.searchapi.io/api/v1/search");
+      url.searchParams.set("engine", "google_maps_reviews");
+      url.searchParams.set("place_id", placeId);
+      url.searchParams.set("api_key", apiKey);
+      url.searchParams.set("sort_by", "newestFirst");
+    }
 
-  // Reviews
-  if (userRatingCount < 10) return { score: 0, lead_quality: "desqualificado", score_breakdown: { reviews: 0, nota: 0, website: 0, fotos: 0, horarios: 0, preco: 0 } };
-  if (userRatingCount >= 100) { score += 25; breakdown.reviews = 25; }
-  else if (userRatingCount >= 30) { score += 15; breakdown.reviews = 15; }
-  else breakdown.reviews = 0;
+    const res = await fetch(url.toString());
+    if (!res.ok) { await res.text(); return []; }
+    const data = await res.json();
+    const reviews = data.reviews || [];
+    return reviews.slice(0, 5).map((r: any) => ({
+      text: (r.snippet || r.text || r.body || "").slice(0, 500),
+      rating: r.rating || 0,
+    })).filter((r: any) => r.text.length > 0);
+  } catch (e) {
+    console.error("Review fetch error for place", placeId, e);
+    return [];
+  }
+}
 
-  // Rating
-  if (rating > 0 && rating < 3.8) return { score: 0, lead_quality: "desqualificado", score_breakdown: { reviews: breakdown.reviews, nota: 0, website: 0, fotos: 0, horarios: 0, preco: 0 } };
-  if (rating >= 4.2) { score += 20; breakdown.nota = 20; }
-  else breakdown.nota = 0;
-
-  // Website
-  if (websiteUri) { score += 20; breakdown.website = 20; }
-  else breakdown.website = 0;
-
-  // Photos
-  if (photosCount >= 10) { score += 15; breakdown.fotos = 15; }
-  else if (photosCount >= 3) { score += 5; breakdown.fotos = 5; }
-  else breakdown.fotos = 0;
-
-  // Opening hours
-  if (periodsCount >= 6) { score += 10; breakdown.horarios = 10; }
-  else breakdown.horarios = 0;
-
-  // Price level
-  if (priceLevel >= 2) { score += 10; breakdown.preco = 10; }
-  else breakdown.preco = 0;
-
-  let lead_quality: string;
-  if (score >= 70) lead_quality = "quente";
-  else if (score >= 40) lead_quality = "morno";
-  else lead_quality = "frio";
-
-  return { score, lead_quality, score_breakdown: breakdown };
+// Parse address for bairro and estado
+function parseAddressParts(address: string | null): { bairro: string | null; estado: string | null } {
+  if (!address) return { bairro: null, estado: null };
+  const estadoMatch = address.match(/\b([A-Z]{2})\b(?:\s*,?\s*\d{5})?/);
+  const estado = estadoMatch ? estadoMatch[1] : null;
+  const parts = address.split(" - ");
+  let bairro: string | null = null;
+  if (parts.length >= 2) {
+    const candidate = parts[1].split(",")[0].trim();
+    if (candidate.length > 2 && candidate.length < 50) bairro = candidate;
+  }
+  return { bairro, estado };
 }
 
 function parseGoogleMapsResult(r: any) {
-  const { score, lead_quality, score_breakdown } = calculateLeadScore(r);
+  const priceStr = r.price || "";
+  const priceLevel = priceStr.length || (r.price_level ?? null);
+  const address = r.address || null;
+  const { bairro, estado } = parseAddressParts(address);
+
   return {
     nome_empresa: r.title || r.name || "Sem nome",
     telefone: r.phone || null,
     site: r.website || r.link || null,
-    endereco: r.address || null,
+    endereco: address,
     instagram: extractSocialLink(r, "instagram"),
     linkedin: extractSocialLink(r, "linkedin"),
     nome_decisor: null,
-    score,
-    lead_quality,
-    score_breakdown,
+    // Metadata for scoring (transient, not all saved to DB)
+    place_id: r.place_id || null,
+    rating: r.rating || null,
+    total_reviews: r.reviews || r.user_ratings_total || 0,
+    price_level: priceLevel || null,
+    categoria: r.type || (r.types && r.types[0]) || null,
+    bairro,
+    estado,
+    reviews: [] as Array<{ text: string; rating: number }>,
   };
 }
 
@@ -345,7 +356,6 @@ Deno.serve(async (req) => {
     if (source === "linkedin") {
       const industryPart = setor ? ` "${setor}"` : "";
       const keywordsPart = keywords ? ` ${keywords}` : "";
-      // Single focused query - no secondary query with Portuguese job titles
       const searchQuery = `site:linkedin.com/in "${query}"${industryPart}${keywordsPart} "${location}"`;
 
       if (provider === "serpapi") {
@@ -367,7 +377,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Use AI to parse and validate all LinkedIn results
       const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
       const leads = await parseLinkedInResultsBatch(
         allResults,
@@ -375,7 +384,6 @@ Deno.serve(async (req) => {
         lovableKey
       );
 
-      // Deduplicate
       const seen = new Set<string>();
       const uniqueLeads = leads.filter((lead) => {
         const key = `${lead.nome_empresa.toLowerCase()}_${(lead.nome_decisor || "").toLowerCase()}`;
@@ -410,7 +418,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Parse and deduplicate Google Maps results
+      // Parse results
       const seen = new Set<string>();
       const leads = allResults
         .map((r) => parseGoogleMapsResult(r))
@@ -421,6 +429,24 @@ Deno.serve(async (req) => {
           seen.add(key);
           return true;
         });
+
+      // Fetch reviews for qualifying leads (rating >= 3.5, reviews >= 10)
+      console.log(`Fetching reviews for qualifying leads...`);
+      const REVIEW_BATCH = 5;
+      for (let i = 0; i < leads.length; i += REVIEW_BATCH) {
+        const batch = leads.slice(i, i + REVIEW_BATCH);
+        const reviewPromises = batch.map((lead) => {
+          if (!lead.place_id || (lead.total_reviews || 0) < 10 || (lead.rating || 0) < 3.5) {
+            return Promise.resolve([]);
+          }
+          return fetchPlaceReviews(lead.place_id, apiKey, provider);
+        });
+        const reviewResults = await Promise.all(reviewPromises);
+        batch.forEach((lead, idx) => {
+          lead.reviews = reviewResults[idx];
+        });
+      }
+      console.log(`Reviews fetched for ${leads.filter(l => l.reviews.length > 0).length} leads`);
 
       return new Response(
         JSON.stringify({ leads, total: leads.length }),
@@ -443,6 +469,5 @@ function extractSocialLink(result: any, platform: string): string | null {
       if (link.link?.includes(platform)) return link.link;
     }
   }
-  if (result.website?.includes(platform)) return result.website;
   return null;
 }

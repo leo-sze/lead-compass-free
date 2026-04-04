@@ -76,7 +76,8 @@ const GoogleSearch = () => {
             fonte: "google",
             score: lead.score ?? null,
             lead_quality: lead.lead_quality ?? null,
-          },
+            score_breakdown: lead.score_breakdown ?? null,
+          } as any,
           { onConflict: "nome_empresa,telefone" }
         );
         if (insertError) dupCount++;

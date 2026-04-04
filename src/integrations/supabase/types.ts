@@ -29,6 +29,7 @@ export type Database = {
           nome_empresa: string
           query_origem: string | null
           score: number | null
+          score_breakdown: Json | null
           site: string | null
           telefone: string | null
           termo_pesquisa: string | null
@@ -47,6 +48,7 @@ export type Database = {
           nome_empresa: string
           query_origem?: string | null
           score?: number | null
+          score_breakdown?: Json | null
           site?: string | null
           telefone?: string | null
           termo_pesquisa?: string | null
@@ -65,6 +67,7 @@ export type Database = {
           nome_empresa?: string
           query_origem?: string | null
           score?: number | null
+          score_breakdown?: Json | null
           site?: string | null
           telefone?: string | null
           termo_pesquisa?: string | null

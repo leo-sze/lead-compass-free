@@ -21,6 +21,27 @@ type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
   cidade?: string | null;
   fonte?: string | null;
+  score?: number | null;
+  lead_quality?: string | null;
+};
+
+type QualityFilter = "all" | "quente" | "morno" | "frio" | "desqualificado";
+
+const qualityBadge = (quality: string | null | undefined, score: number | null | undefined) => {
+  if (!quality) return null;
+  const config: Record<string, { label: string; className: string }> = {
+    quente: { label: "Quente", className: "bg-green-500/10 text-green-400 border-green-500/30" },
+    morno: { label: "Morno", className: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
+    frio: { label: "Frio", className: "bg-red-500/10 text-red-400 border-red-500/30" },
+    desqualificado: { label: "Desqualificado", className: "bg-muted/50 text-muted-foreground border-border" },
+  };
+  const c = config[quality];
+  if (!c) return null;
+  return (
+    <Badge variant="outline" className={`${c.className} text-xs`}>
+      {c.label} {score != null ? `(${score})` : ""}
+    </Badge>
+  );
 };
 
 type KommoStatus = "success" | "error" | "duplicate";
@@ -35,6 +56,7 @@ const Leads = () => {
   const [hasPhone, setHasPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
+  const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );
@@ -99,6 +121,18 @@ const Leads = () => {
 
   const filtered = useMemo(() => {
     let result = leads;
+    if (qualityFilter !== "all") {
+      if (qualityFilter === "desqualificado") {
+        result = result.filter((l) => l.lead_quality === "desqualificado");
+      } else {
+        // Hide desqualificado by default unless explicitly selected
+        result = result.filter((l) => l.lead_quality !== "desqualificado");
+        result = result.filter((l) => l.lead_quality === qualityFilter);
+      }
+    } else {
+      // "all" hides desqualificado by default
+      result = result.filter((l) => l.lead_quality !== "desqualificado");
+    }
     if (filter) {
       const f = filter.toLowerCase();
       result = result.filter(
@@ -119,8 +153,10 @@ const Leads = () => {
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
+    // Sort by score descending
+    result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, qualityFilter]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -160,9 +196,9 @@ const Leads = () => {
 
   const exportCSV = () => {
     const toExport = selected.size > 0 ? selectedLeads : leads;
-    const headers = ["Nome", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
+    const headers = ["Nome", "Score", "Qualidade", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
     const rows = toExport.map((l) => [
-      l.nome_empresa, (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
+      l.nome_empresa, String(l.score ?? ""), l.lead_quality || "", (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
       l.instagram || "", l.linkedin || "", l.termo_pesquisa || "", l.cidade || "", l.fonte || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -376,6 +412,33 @@ const Leads = () => {
         onHasInstagramChange={setHasInstagram}
       />
 
+      {/* Quality filter tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {([
+          { value: "quente" as QualityFilter, label: "🔥 Quente", cls: "bg-green-500/10 text-green-400 border-green-500/30" },
+          { value: "morno" as QualityFilter, label: "🟡 Morno", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
+          { value: "frio" as QualityFilter, label: "🔵 Frio", cls: "bg-red-500/10 text-red-400 border-red-500/30" },
+          { value: "all" as QualityFilter, label: "Todos", cls: "bg-secondary text-foreground border-border" },
+          { value: "desqualificado" as QualityFilter, label: "Desqualificados", cls: "bg-muted/50 text-muted-foreground border-border" },
+        ]).map((tab) => {
+          const count = leads.filter((l) => {
+            if (tab.value === "all") return l.lead_quality !== "desqualificado";
+            return l.lead_quality === tab.value;
+          }).length;
+          return (
+            <Button
+              key={tab.value}
+              variant="outline"
+              size="sm"
+              onClick={() => setQualityFilter(tab.value)}
+              className={`${qualityFilter === tab.value ? tab.cls + " ring-1 ring-accent" : "bg-secondary/30 text-muted-foreground border-border/50"}`}
+            >
+              {tab.label} ({count})
+            </Button>
+          );
+        })}
+      </div>
+
       <Card className="border-border/50 bg-card/80">
         <CardContent className="p-0">
           <Table>
@@ -388,6 +451,7 @@ const Leads = () => {
                   />
                 </TableHead>
                 <TableHead>Empresa</TableHead>
+                <TableHead>Score</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>
@@ -403,7 +467,7 @@ const Leads = () => {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={13} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
@@ -421,6 +485,7 @@ const Leads = () => {
                         />
                       </TableCell>
                       <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
+                      <TableCell>{qualityBadge(lead.lead_quality, lead.score)}</TableCell>
                       <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
                       <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
                       <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>

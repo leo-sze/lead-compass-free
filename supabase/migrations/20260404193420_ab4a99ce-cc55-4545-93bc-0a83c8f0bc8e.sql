@@ -1,0 +1,2 @@
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS score integer DEFAULT NULL;
+ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS lead_quality text DEFAULT NULL;

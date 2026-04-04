@@ -259,6 +259,18 @@ export default function FindContacts() {
         <p className="text-muted-foreground text-sm">Importe um CSV do Apollo e encontre telefones automaticamente via Google Places</p>
       </div>
 
+      {hasApiKey === false && (
+        <Card className="border-destructive/50 bg-destructive/10">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <div>
+              <p className="font-medium text-sm">Google Places API Key não configurada</p>
+              <p className="text-muted-foreground text-xs">Vá em <a href="/settings" className="text-primary underline">Configurações</a> e adicione sua chave. A API tem $200/mês de crédito gratuito.</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {contacts.length === 0 ? (
         <Card className="border-dashed border-2 border-border/50 bg-card/50">
           <CardContent className="flex flex-col items-center justify-center py-16">

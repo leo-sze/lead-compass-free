@@ -5,56 +5,74 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-interface Contact {
+interface ContactInput {
   index: number;
   companyName: string;
+  website?: string;
   city?: string;
   state?: string;
 }
 
-async function findPhone(contact: Contact, apiKey: string): Promise<{ index: number; phone: string | null }> {
-  const query = [contact.companyName, contact.city, contact.state].filter(Boolean).join(" ");
-  
-  try {
-    const url = new URL("https://maps.googleapis.com/maps/api/place/findplacefromtext/json");
-    url.searchParams.set("input", query);
-    url.searchParams.set("inputtype", "textquery");
-    url.searchParams.set("fields", "name,formatted_phone_number");
-    url.searchParams.set("key", apiKey);
+interface ContactResult {
+  index: number;
+  phone: string | null;
+  source: "site" | "places" | null;
+}
 
-    const res = await fetch(url.toString());
+const PHONE_REGEX = /(\+?55[\s\-]?)?(\(?\d{2}\)?)[\s\-]?(9?\d{4})[\s\-]?(\d{4})/g;
+
+async function scrapePhoneFromSite(url: string): Promise<string | null> {
+  try {
+    let formatted = url.trim();
+    if (!formatted.startsWith("http")) formatted = `https://${formatted}`;
+
+    const res = await fetch(formatted, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadExtract/1.0)" },
+      redirect: "follow",
+    });
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const matches = html.match(PHONE_REGEX);
+    if (matches && matches.length > 0) {
+      // Return the first match, cleaned up
+      return matches[0].replace(/[\s\-]/g, "").replace(/^\+?55/, "+55 ");
+    }
+  } catch (e) {
+    console.error(`Scrape error for ${url}:`, e);
+  }
+  return null;
+}
+
+async function findPhoneViaPlaces(companyName: string, city: string, state: string, apiKey: string): Promise<string | null> {
+  const query = [companyName, city, state].filter(Boolean).join(" ");
+  if (!query.trim()) return null;
+
+  try {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": "places.displayName,places.nationalPhoneNumber",
+      },
+      body: JSON.stringify({ textQuery: query }),
+    });
+
     if (!res.ok) {
       console.error(`Places API error for "${query}": ${res.status}`);
-      return { index: contact.index, phone: null };
+      return null;
     }
 
     const data = await res.json();
-    const candidate = data.candidates?.[0];
-    
-    if (candidate?.formatted_phone_number) {
-      return { index: contact.index, phone: candidate.formatted_phone_number };
-    }
-
-    // If findplacefromtext doesn't return phone, try Place Details
-    if (candidate?.place_id) {
-      const detailsUrl = new URL("https://maps.googleapis.com/maps/api/place/details/json");
-      detailsUrl.searchParams.set("place_id", candidate.place_id);
-      detailsUrl.searchParams.set("fields", "formatted_phone_number");
-      detailsUrl.searchParams.set("key", apiKey);
-
-      const detailsRes = await fetch(detailsUrl.toString());
-      if (detailsRes.ok) {
-        const detailsData = await detailsRes.json();
-        if (detailsData.result?.formatted_phone_number) {
-          return { index: contact.index, phone: detailsData.result.formatted_phone_number };
-        }
-      }
+    const place = data.places?.[0];
+    if (place?.nationalPhoneNumber) {
+      return place.nationalPhoneNumber;
     }
   } catch (e) {
-    console.error(`Error finding phone for "${query}":`, e);
+    console.error(`Places error for "${query}":`, e);
   }
-
-  return { index: contact.index, phone: null };
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -63,7 +81,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { contacts } = await req.json() as { contacts: Contact[] };
+    const { contacts } = await req.json() as { contacts: ContactInput[] };
 
     if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
       return new Response(
@@ -72,7 +90,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get Google Places API key from settings table
+    // Get Google Places API key from settings (optional - only needed for stage 2)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -83,22 +101,35 @@ Deno.serve(async (req) => {
       .eq("key", "google_places_api_key")
       .maybeSingle();
 
-    const apiKey = setting?.value;
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "Google Places API Key não configurada. Vá em Configurações para adicioná-la." }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const placesApiKey = setting?.value || "";
 
-    // Process in batches of 5 with 200ms delay between each
-    const results: { index: number; phone: string | null }[] = [];
-    
+    const results: ContactResult[] = [];
+
     for (let i = 0; i < contacts.length; i++) {
-      const result = await findPhone(contacts[i], apiKey);
-      results.push(result);
-      
-      // 200ms delay between requests to avoid rate limit
+      const contact = contacts[i];
+      let phone: string | null = null;
+      let source: "site" | "places" | null = null;
+
+      // Stage 1: Scrape website
+      if (contact.website) {
+        phone = await scrapePhoneFromSite(contact.website);
+        if (phone) source = "site";
+      }
+
+      // Stage 2: Google Places fallback
+      if (!phone && placesApiKey) {
+        phone = await findPhoneViaPlaces(
+          contact.companyName,
+          contact.city || "",
+          contact.state || "",
+          placesApiKey
+        );
+        if (phone) source = "places";
+      }
+
+      results.push({ index: contact.index, phone, source });
+
+      // 200ms delay between requests
       if (i < contacts.length - 1) {
         await new Promise(r => setTimeout(r, 200));
       }

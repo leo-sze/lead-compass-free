@@ -18,17 +18,29 @@ import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 
+type ScoreBreakdown = Record<string, number>;
+
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
   cidade?: string | null;
   fonte?: string | null;
   score?: number | null;
   lead_quality?: string | null;
+  score_breakdown?: ScoreBreakdown | null;
 };
 
 type QualityFilter = "all" | "quente" | "morno" | "frio" | "desqualificado";
 
-const qualityBadge = (quality: string | null | undefined, score: number | null | undefined) => {
+const breakdownLabels: Record<string, { label: string; max: number }> = {
+  reviews: { label: "Reviews", max: 25 },
+  nota: { label: "Nota", max: 20 },
+  website: { label: "Website", max: 20 },
+  fotos: { label: "Fotos", max: 15 },
+  horarios: { label: "Horários", max: 10 },
+  preco: { label: "Nível de preço", max: 10 },
+};
+
+const QualityBadgeWithHover = ({ quality, score, breakdown }: { quality: string | null | undefined; score: number | null | undefined; breakdown: ScoreBreakdown | null | undefined }) => {
   if (!quality) return null;
   const config: Record<string, { label: string; className: string }> = {
     quente: { label: "Quente", className: "bg-green-500/10 text-green-400 border-green-500/30" },
@@ -38,10 +50,41 @@ const qualityBadge = (quality: string | null | undefined, score: number | null |
   };
   const c = config[quality];
   if (!c) return null;
-  return (
-    <Badge variant="outline" className={`${c.className} text-xs`}>
+
+  const badge = (
+    <Badge variant="outline" className={`${c.className} text-xs cursor-help`}>
       {c.label} {score != null ? `(${score})` : ""}
     </Badge>
+  );
+
+  if (!breakdown) return badge;
+
+  return (
+    <HoverCard openDelay={200}>
+      <HoverCardTrigger asChild>{badge}</HoverCardTrigger>
+      <HoverCardContent className="w-64 p-3" side="right">
+        <p className="text-sm font-semibold mb-2">Pontuação: {score ?? 0}/100</p>
+        <div className="space-y-1.5">
+          {Object.entries(breakdownLabels).map(([key, { label, max }]) => {
+            const val = breakdown[key] ?? 0;
+            return (
+              <div key={key} className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{label}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-16 h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${val > 0 ? "bg-accent" : "bg-muted"}`}
+                      style={{ width: `${max > 0 ? (val / max) * 100 : 0}%` }}
+                    />
+                  </div>
+                  <span className="font-mono w-8 text-right">{val}/{max}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
   );
 };
 

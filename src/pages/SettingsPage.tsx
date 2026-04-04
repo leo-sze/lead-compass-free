@@ -37,6 +37,9 @@ const SettingsPage = () => {
         if (row.key === "api_provider") setProvider(row.value || "serpapi");
         if (row.key === "whatsapp_template") setWhatsappTemplate(row.value || "");
         if (row.key === "google_places_api_key") setGooglePlacesKey(row.value || "");
+        if (row.key === "kommo_subdomain") setKommoSubdomain(row.value || "");
+        if (row.key === "kommo_api_token") setKommoToken(row.value || "");
+        if (row.key === "kommo_pipeline_id") setKommoPipelineId(row.value || "");
       }
     }
   };

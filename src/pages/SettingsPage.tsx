@@ -60,6 +60,9 @@ const SettingsPage = () => {
       await saveSetting("api_provider", provider);
       await saveSetting("whatsapp_template", whatsappTemplate);
       await saveSetting("google_places_api_key", googlePlacesKey);
+      await saveSetting("kommo_subdomain", kommoSubdomain);
+      await saveSetting("kommo_api_token", kommoToken);
+      await saveSetting("kommo_pipeline_id", kommoPipelineId);
       toast({ title: "Configurações salvas!" });
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });

@@ -9,6 +9,7 @@ import GoogleSearch from "./pages/GoogleSearch";
 import LinkedInSearch from "./pages/LinkedInSearch";
 import Leads from "./pages/Leads";
 import SettingsPage from "./pages/SettingsPage";
+import FindContacts from "./pages/FindContacts";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -25,6 +26,7 @@ const App = () => (
             <Route path="/google-search" element={<GoogleSearch />} />
             <Route path="/linkedin-search" element={<LinkedInSearch />} />
             <Route path="/leads" element={<Leads />} />
+            <Route path="/find-contacts" element={<FindContacts />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

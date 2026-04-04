@@ -1,4 +1,4 @@
-import { Search, Globe, Linkedin, Users, Settings, Zap } from "lucide-react";
+import { Search, Globe, Linkedin, Users, Settings, Zap, Phone } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -18,6 +18,7 @@ const items = [
   { title: "Google Maps", url: "/google-search", icon: Globe },
   { title: "LinkedIn", url: "/linkedin-search", icon: Linkedin },
   { title: "Leads", url: "/leads", icon: Users },
+  { title: "Encontrar Contatos", url: "/find-contacts", icon: Phone },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 

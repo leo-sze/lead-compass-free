@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 const SettingsPage = () => {
   const [apiKey, setApiKey] = useState("");
   const [provider, setProvider] = useState("serpapi");
+  const [googlePlacesKey, setGooglePlacesKey] = useState("");
+  const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );
@@ -30,6 +32,7 @@ const SettingsPage = () => {
         if (row.key === "api_key") setApiKey(row.value || "");
         if (row.key === "api_provider") setProvider(row.value || "serpapi");
         if (row.key === "whatsapp_template") setWhatsappTemplate(row.value || "");
+        if (row.key === "google_places_api_key") setGooglePlacesKey(row.value || "");
       }
     }
   };
@@ -49,6 +52,7 @@ const SettingsPage = () => {
       await saveSetting("api_key", apiKey);
       await saveSetting("api_provider", provider);
       await saveSetting("whatsapp_template", whatsappTemplate);
+      await saveSetting("google_places_api_key", googlePlacesKey);
       toast({ title: "Configurações salvas!" });
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });
@@ -118,6 +122,40 @@ const SettingsPage = () => {
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50 bg-card/80">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Key className="h-5 w-5 text-primary" />
+            Google Places API
+          </CardTitle>
+          <CardDescription>
+            Usada para encontrar telefones de empresas. Tem $200/mês de crédito gratuito.{" "}
+            <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" className="text-accent hover:underline">
+              Obter chave no Google Cloud
+            </a>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="relative">
+            <Input
+              type={showGoogleKey ? "text" : "password"}
+              placeholder="Cole sua Google Places API Key aqui..."
+              value={googlePlacesKey}
+              onChange={(e) => setGooglePlacesKey(e.target.value)}
+              className="pr-10 bg-secondary/50 font-mono"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+              onClick={() => setShowGoogleKey(!showGoogleKey)}
+            >
+              {showGoogleKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
           </div>
         </CardContent>
       </Card>

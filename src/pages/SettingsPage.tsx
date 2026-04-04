@@ -173,7 +173,69 @@ const SettingsPage = () => {
       <Card className="border-border/50 bg-card/80">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-green-400" />
+            <Building2 className="h-5 w-5 text-primary" />
+            Integração Kommo
+          </CardTitle>
+          <CardDescription>
+            Exporte leads diretamente para seu CRM Kommo.{" "}
+            <a href="https://www.kommo.com/br/" target="_blank" rel="noopener" className="text-accent hover:underline">
+              Saiba mais
+            </a>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Subdomínio Kommo</label>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="minhaempresa"
+                value={kommoSubdomain}
+                onChange={(e) => setKommoSubdomain(e.target.value)}
+                className="bg-secondary/50"
+              />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">.kommo.com</span>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">API Token</label>
+            <div className="relative">
+              <Input
+                type={showKommoToken ? "text" : "password"}
+                placeholder="Cole seu API Token aqui..."
+                value={kommoToken}
+                onChange={(e) => setKommoToken(e.target.value)}
+                className="pr-10 bg-secondary/50 font-mono"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setShowKommoToken(!showKommoToken)}
+              >
+                {showKommoToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Gere em Kommo → Configurações → Integrações → Token de API
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Pipeline ID</label>
+            <Input
+              placeholder="Ex: 1234567"
+              value={kommoPipelineId}
+              onChange={(e) => setKommoPipelineId(e.target.value)}
+              className="bg-secondary/50 font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              ID numérico do pipeline. Encontre em Kommo → Configurações → Funis → clique no funil → veja a URL (ex: /leads/pipeline/1234567)
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
             Mensagem WhatsApp
           </CardTitle>
           <CardDescription>

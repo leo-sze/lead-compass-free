@@ -12,6 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 const SettingsPage = () => {
   const [apiKey, setApiKey] = useState("");
   const [provider, setProvider] = useState("serpapi");
+  const [googlePlacesKey, setGooglePlacesKey] = useState("");
+  const [showGoogleKey, setShowGoogleKey] = useState(false);
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );

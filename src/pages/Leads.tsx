@@ -196,9 +196,9 @@ const Leads = () => {
 
   const exportCSV = () => {
     const toExport = selected.size > 0 ? selectedLeads : leads;
-    const headers = ["Nome", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
+    const headers = ["Nome", "Score", "Qualidade", "CNPJ", "Decisor", "Telefone", "Site", "Endereço", "Instagram", "LinkedIn", "Termo", "Cidade", "Fonte"];
     const rows = toExport.map((l) => [
-      l.nome_empresa, (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
+      l.nome_empresa, String(l.score ?? ""), l.lead_quality || "", (l as any).cnpj || "", l.nome_decisor || "", l.telefone || "", l.site || "", l.endereco || "",
       l.instagram || "", l.linkedin || "", l.termo_pesquisa || "", l.cidade || "", l.fonte || "",
     ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");

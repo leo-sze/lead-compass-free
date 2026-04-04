@@ -222,6 +222,26 @@ export default function FindContacts() {
     URL.revokeObjectURL(url);
   }, [contacts]);
 
+  const handleSendToLeads = useCallback(async () => {
+    if (contacts.length === 0) return;
+    const leadsToInsert = contacts.map(c => ({
+      nome_empresa: c.companyName || "Sem nome",
+      nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
+      telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
+      site: c.website || null,
+      cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
+      fonte: "Apollo CSV",
+    }));
+
+    const { error } = await supabase.from("leads").insert(leadsToInsert);
+    if (error) {
+      toast({ title: "Erro ao enviar leads", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: `${leadsToInsert.length} leads enviados com sucesso!` });
+    navigate("/leads");
+  }, [contacts, toast, navigate]);
+
   const statusBadge = (status: Contact["status"]) => {
     switch (status) {
       case "has_phone":

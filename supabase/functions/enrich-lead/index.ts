@@ -359,7 +359,7 @@ Deno.serve(async (req) => {
       const brasilData = await queryBrasilApi(foundCnpj);
       if (brasilData) {
         // Check situacao_cadastral
-        const situacao = (brasilData.situacao_cadastral || "").toUpperCase();
+        const situacao = String(brasilData.situacao_cadastral ?? "").toUpperCase();
         if (situacao === "BAIXADA" || situacao === "INAPTA") {
           console.log(`[QSA] Empresa com situação ${situacao}, ignorando dados`);
         } else {

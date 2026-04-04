@@ -21,9 +21,28 @@ type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
   cidade?: string | null;
   fonte?: string | null;
+  score?: number | null;
+  lead_quality?: string | null;
 };
 
-type KommoStatus = "success" | "error" | "duplicate";
+type QualityFilter = "all" | "quente" | "morno" | "frio" | "desqualificado";
+
+const qualityBadge = (quality: string | null | undefined, score: number | null | undefined) => {
+  if (!quality) return null;
+  const config: Record<string, { label: string; className: string }> = {
+    quente: { label: "Quente", className: "bg-green-500/10 text-green-400 border-green-500/30" },
+    morno: { label: "Morno", className: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
+    frio: { label: "Frio", className: "bg-red-500/10 text-red-400 border-red-500/30" },
+    desqualificado: { label: "Desqualificado", className: "bg-muted/50 text-muted-foreground border-border" },
+  };
+  const c = config[quality];
+  if (!c) return null;
+  return (
+    <Badge variant="outline" className={`${c.className} text-xs`}>
+      {c.label} {score != null ? `(${score})` : ""}
+    </Badge>
+  );
+};
 
 const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);

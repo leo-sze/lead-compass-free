@@ -74,6 +74,8 @@ const GoogleSearch = () => {
             termo_pesquisa: query.trim(),
             cidade: lead.cidade || null,
             fonte: "google",
+            score: lead.score ?? null,
+            lead_quality: lead.lead_quality ?? null,
           },
           { onConflict: "nome_empresa,telefone" }
         );

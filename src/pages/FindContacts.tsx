@@ -92,7 +92,6 @@ function rowToContact(row: Record<string, string>): Contact {
 export default function FindContacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
-  const [scoring, setScoring] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [summary, setSummary] = useState<{ foundSite: number; foundPlaces: number; notFound: number } | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);

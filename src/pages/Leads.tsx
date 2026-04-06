@@ -434,14 +434,17 @@ const Leads = () => {
           });
 
           if (!scoreError && scoreData && !scoreData.error) {
-            const updates = {
+            const updates: any = {
               score: scoreData.score,
               lead_quality: scoreData.classificacao,
               justificativa: scoreData.justificativa,
               sinais_positivos: scoreData.sinais_positivos,
               sinais_negativos: scoreData.sinais_negativos,
             };
-            await supabase.from("leads").update(updates as any).eq("id", lead.id);
+            if (scoreData.website_encontrado && !lead.site) {
+              updates.site = scoreData.website_encontrado;
+            }
+            await supabase.from("leads").update(updates).eq("id", lead.id);
             setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...updates } : l));
           }
         } catch (e) {

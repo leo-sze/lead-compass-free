@@ -216,7 +216,6 @@ const Leads = () => {
   );
 
   const toggleSelect = (id: string) => {
-    if (kommoStatuses[id]?.status === "success") return;
     setSelected((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
@@ -225,11 +224,30 @@ const Leads = () => {
   };
 
   const toggleAll = () => {
-    if (selected.size === filtered.filter(l => kommoStatuses[l.id]?.status !== "success").length) {
+    if (selected.size === filtered.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.filter(l => kommoStatuses[l.id]?.status !== "success").map((l) => l.id)));
+      setSelected(new Set(filtered.map((l) => l.id)));
     }
+  };
+
+  const removeExportedLeads = async () => {
+    const exportedIds = Array.from(selected).filter(id => kommoStatuses[id]?.status === "success");
+    if (exportedIds.length === 0) {
+      toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });
+      return;
+    }
+    await supabase.from("leads").delete().in("id", exportedIds);
+    setLeads((prev) => prev.filter((l) => !exportedIds.includes(l.id)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      exportedIds.forEach(id => next.delete(id));
+      return next;
+    });
+    const newStatuses = { ...kommoStatuses };
+    exportedIds.forEach(id => delete newStatuses[id]);
+    setKommoStatuses(newStatuses);
+    toast({ title: `${exportedIds.length} leads enviados removidos da lista` });
   };
 
   const openWhatsApp = (lead: Lead) => {
@@ -511,7 +529,7 @@ const Leads = () => {
     setSelected(new Set());
   };
 
-  const selectableCount = filtered.filter(l => kommoStatuses[l.id]?.status !== "success").length;
+  const selectableCount = filtered.length;
 
   return (
     <div className="space-y-6">
@@ -529,6 +547,11 @@ const Leads = () => {
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>
+              {Array.from(selected).some(id => kommoStatuses[id]?.status === "success") && (
+                <Button variant="outline" size="sm" onClick={removeExportedLeads} className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
+                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => kommoStatuses[id]?.status === "success").length})
+                </Button>
+              )}
             </>
           )}
           <Button
@@ -660,12 +683,11 @@ const Leads = () => {
                   const isExported = ks?.status === "success";
                   const isScoring = reAnalyzing.has(lead.id);
                   return (
-                    <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-70" : ""}`}>
+                    <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-50 bg-green-500/5" : ""}`}>
                       <TableCell>
                         <Checkbox
                           checked={selected.has(lead.id)}
                           onCheckedChange={() => toggleSelect(lead.id)}
-                          disabled={isExported}
                         />
                       </TableCell>
                       <TableCell className="font-medium">{lead.nome_empresa}</TableCell>

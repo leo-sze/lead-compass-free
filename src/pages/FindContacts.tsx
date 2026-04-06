@@ -236,7 +236,7 @@ export default function FindContacts() {
       fonte: "Apollo CSV",
     }));
 
-    const { error } = await supabase.from("leads").insert(leadsToInsert);
+    const { error } = await supabase.from("leads").upsert(leadsToInsert, { onConflict: "nome_empresa,telefone", ignoreDuplicates: true });
     if (error) {
       toast({ title: "Erro ao enviar leads", description: error.message, variant: "destructive" });
       return;

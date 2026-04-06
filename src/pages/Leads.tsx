@@ -529,7 +529,7 @@ const Leads = () => {
     setSelected(new Set());
   };
 
-  const selectableCount = filtered.filter(l => kommoStatuses[l.id]?.status !== "success").length;
+  const selectableCount = filtered.length;
 
   return (
     <div className="space-y-6">

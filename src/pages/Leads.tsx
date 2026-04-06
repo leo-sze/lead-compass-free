@@ -224,11 +224,30 @@ const Leads = () => {
   };
 
   const toggleAll = () => {
-    if (selected.size === filtered.filter(l => kommoStatuses[l.id]?.status !== "success").length) {
+    if (selected.size === filtered.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.filter(l => kommoStatuses[l.id]?.status !== "success").map((l) => l.id)));
+      setSelected(new Set(filtered.map((l) => l.id)));
     }
+  };
+
+  const removeExportedLeads = async () => {
+    const exportedIds = Array.from(selected).filter(id => kommoStatuses[id]?.status === "success");
+    if (exportedIds.length === 0) {
+      toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });
+      return;
+    }
+    await supabase.from("leads").delete().in("id", exportedIds);
+    setLeads((prev) => prev.filter((l) => !exportedIds.includes(l.id)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      exportedIds.forEach(id => next.delete(id));
+      return next;
+    });
+    const newStatuses = { ...kommoStatuses };
+    exportedIds.forEach(id => delete newStatuses[id]);
+    setKommoStatuses(newStatuses);
+    toast({ title: `${exportedIds.length} leads enviados removidos da lista` });
   };
 
   const openWhatsApp = (lead: Lead) => {

@@ -121,6 +121,8 @@ const Leads = () => {
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
   const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
+  const [bulkScoring, setBulkScoring] = useState(false);
+  const [bulkScoreProgress, setBulkScoreProgress] = useState({ current: 0, total: 0 });
   const { toast } = useToast();
 
   // Kommo export state

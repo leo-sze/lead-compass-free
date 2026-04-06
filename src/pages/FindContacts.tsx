@@ -281,6 +281,7 @@ export default function FindContacts() {
     let scored = 0;
 
     for (let i = 0; i < inserted.length; i += BATCH) {
+      if (!scoring) break; // allow cancel if component state changes
       const batch = inserted.slice(i, i + BATCH);
 
       const promises = batch.map(async (lead) => {
@@ -309,6 +310,8 @@ export default function FindContacts() {
               sinais_positivos: scoreData.sinais_positivos,
               sinais_negativos: scoreData.sinais_negativos,
             } as any).eq("id", lead.id);
+          } else if (scoreError) {
+            console.warn("Score API error for", lead.nome_empresa, scoreError);
           }
         } catch (e) {
           console.error("Score error for", lead.nome_empresa, e);
@@ -318,11 +321,23 @@ export default function FindContacts() {
       await Promise.all(promises);
       scored += batch.length;
       setScoreProgress({ current: scored, total: inserted.length });
+
+      // Small delay between batches to avoid rate limits
+      if (i + BATCH < inserted.length) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
 
     setScoring(false);
-    toast({ title: "Análise concluída!", description: `${inserted.length} leads analisados pela IA.` });
-    navigate("/leads");
+    toast({ 
+      title: "Análise concluída!", 
+      description: `${scored} leads analisados pela IA.`,
+      action: (
+        <Button variant="outline" size="sm" onClick={() => navigate("/leads")}>
+          Ver Leads
+        </Button>
+      ),
+    });
   }, [contacts, toast, navigate]);
 
   const statusBadge = (status: Contact["status"]) => {

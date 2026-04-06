@@ -22,6 +22,92 @@ const BodySchema = z.object({
   })).optional().default([]),
 });
 
+// --- Research functions ---
+
+async function searchGoogleMaps(nome: string, cidade: string | null): Promise<any | null> {
+  const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
+  if (!apiKey) return null;
+
+  const query = `${nome} ${cidade || ""} avaliações Google Maps`;
+  console.log(`[RESEARCH] Firecrawl search: "${query}"`);
+
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/search", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        limit: 3,
+        lang: "pt-br",
+        country: "BR",
+        scrapeOptions: { formats: ["markdown"] },
+      }),
+    });
+
+    if (!res.ok) {
+      console.error(`[RESEARCH] Firecrawl error: ${res.status}`);
+      const errText = await res.text();
+      console.error(errText);
+      return null;
+    }
+
+    const data = await res.json();
+    const results = data?.data || [];
+    console.log(`[RESEARCH] Firecrawl returned ${results.length} results`);
+
+    // Combine markdown from results
+    const combinedText = results
+      .map((r: any) => `### ${r.title || r.url}\n${(r.markdown || r.description || "").slice(0, 2000)}`)
+      .join("\n\n");
+
+    return combinedText || null;
+  } catch (e) {
+    console.error("[RESEARCH] Firecrawl fetch error:", e);
+    return null;
+  }
+}
+
+async function searchCompanyWebsite(website: string): Promise<string | null> {
+  if (!website) return null;
+  const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
+  if (!apiKey) return null;
+
+  let url = website.trim();
+  if (!url.startsWith("http")) url = `https://${url}`;
+
+  console.log(`[RESEARCH] Scraping website: ${url}`);
+
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error(`[RESEARCH] Website scrape error: ${res.status}`);
+      await res.text();
+      return null;
+    }
+
+    const data = await res.json();
+    const markdown = data?.data?.markdown || data?.markdown || "";
+    console.log(`[RESEARCH] Website scraped: ${markdown.length} chars`);
+    return markdown.slice(0, 3000) || null;
+  } catch (e) {
+    console.error("[RESEARCH] Website scrape error:", e);
+    return null;
+  }
+}
+
+function hasRealData(d: z.infer<typeof BodySchema>): boolean {
+  return (d.total_reviews != null && d.total_reviews > 0) || (d.reviews && d.reviews.length > 0);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -34,41 +120,76 @@ Deno.serve(async (req) => {
     }
 
     const d = parsed.data;
-    const totalReviews = d.total_reviews ?? 0;
-    const rating = d.rating ?? 0;
+    let totalReviews = d.total_reviews ?? 0;
+    let rating = d.rating ?? 0;
+    let reviewsText = "";
+    let researchContext = "";
 
-    // Pre-filter: insufficient reviews
-    if (totalReviews < 10) {
-      return new Response(JSON.stringify({
-        score: 0,
-        classificacao: "desqualificado",
-        justificativa: "Volume de avaliações insuficiente para análise confiável.",
-        sinais_positivos: [],
-        sinais_negativos: ["Menos de 10 avaliações"],
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
+    // If no real data (list import), research the company first
+    if (!hasRealData(d)) {
+      console.log(`[RESEARCH] No real data for "${d.nome_empresa}", researching...`);
 
-    // Pre-filter: low rating
-    if (rating > 0 && rating < 3.5) {
-      return new Response(JSON.stringify({
-        score: 0,
-        classificacao: "desqualificado",
-        justificativa: `Reputação abaixo do mínimo aceitável (nota ${rating}/5).`,
-        sinais_positivos: [],
-        sinais_negativos: [`Nota ${rating}/5 abaixo do mínimo de 3.5`],
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      // Parallel: search Google + scrape website
+      const [googleData, websiteData] = await Promise.all([
+        searchGoogleMaps(d.nome_empresa, d.cidade || null),
+        d.website ? searchCompanyWebsite(d.website) : Promise.resolve(null),
+      ]);
+
+      if (googleData) {
+        researchContext += `\n\nDADOS ENCONTRADOS NA WEB (Google/avaliações):\n${googleData}`;
+      }
+      if (websiteData) {
+        researchContext += `\n\nCONTEÚDO DO SITE DA EMPRESA:\n${websiteData}`;
+      }
+
+      if (!googleData && !websiteData) {
+        console.log(`[RESEARCH] No data found for "${d.nome_empresa}"`);
+        return new Response(JSON.stringify({
+          score: 15,
+          classificacao: "frio",
+          justificativa: "Não foi possível encontrar informações suficientes sobre esta empresa na web para uma análise confiável.",
+          sinais_positivos: [],
+          sinais_negativos: ["Sem presença digital identificável", "Sem avaliações encontradas"],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    } else {
+      // Has real Google Maps data — use pre-filters
+      if (totalReviews < 10) {
+        return new Response(JSON.stringify({
+          score: 0,
+          classificacao: "desqualificado",
+          justificativa: "Volume de avaliações insuficiente para análise confiável.",
+          sinais_positivos: [],
+          sinais_negativos: ["Menos de 10 avaliações"],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      if (rating > 0 && rating < 3.5) {
+        return new Response(JSON.stringify({
+          score: 0,
+          classificacao: "desqualificado",
+          justificativa: `Reputação abaixo do mínimo aceitável (nota ${rating}/5).`,
+          sinais_positivos: [],
+          sinais_negativos: [`Nota ${rating}/5 abaixo do mínimo de 3.5`],
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      reviewsText = d.reviews.length > 0
+        ? d.reviews.map(r => `[${r.rating}★] ${r.text}`).join('\n')
+        : "Nenhuma avaliação textual disponível";
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const reviewsText = d.reviews.length > 0
-      ? d.reviews.map(r => `[${r.rating}★] ${r.text}`).join('\n')
-      : "Nenhuma avaliação textual disponível";
-
     const systemPrompt = `Você é um especialista em qualificação de leads B2B para agências digitais brasileiras. Sua tarefa é analisar dados de um negócio e determinar se ele tem perfil financeiro para contratar serviços de marketing digital por R$3.000 a R$5.000/mês.`;
 
-    const userPrompt = `Analise este negócio e classifique-o.
+    // Build different prompts depending on whether we have Maps data or researched data
+    let userPrompt: string;
+
+    if (hasRealData(d)) {
+      // Original prompt for Google Maps leads
+      userPrompt = `Analise este negócio e classifique-o.
 
 DADOS DO NEGÓCIO:
 - Nome: ${d.nome_empresa}
@@ -80,7 +201,19 @@ DADOS DO NEGÓCIO:
 - Nível de preço: ${d.price_level ? d.price_level : 'não informado'}
 
 AVALIAÇÕES DOS CLIENTES (até 5 mais recentes):
-${reviewsText}
+${reviewsText}`;
+    } else {
+      // Research-based prompt for list leads
+      userPrompt = `Analise este negócio usando os dados reais encontrados na web. Baseie sua análise APENAS nos fatos encontrados, não invente informações.
+
+DADOS BÁSICOS DO LEAD:
+- Nome: ${d.nome_empresa}
+- Cidade: ${d.cidade || 'não informado'}
+- Website: ${d.website || 'não informado'}
+${researchContext}`;
+    }
+
+    userPrompt += `
 
 CRITÉRIOS DE ANÁLISE:
 1. LOCALIZAÇÃO (peso 25%)
@@ -91,29 +224,27 @@ Avalie o perfil socioeconômico da localização considerando:
 - Condomínios e shoppings indicam ticket alto
 - Periferia de capitais: qualificar pelo volume de reviews, não pelo bairro
 
-2. TEOR DAS AVALIAÇÕES (peso 40%)
-Nos textos das avaliações, buscar ativamente:
+2. PRESENÇA DIGITAL E REPUTAÇÃO (peso 40%)
+Buscar ativamente:
 Sinais de negócio consolidado e com investimento:
 - Menções a estrutura, equipamentos novos, espaço amplo, reformas
 - Menções a múltiplas unidades ou franquia
 - Menções a profissionais especializados, equipe grande
 - Clientes que pagam planos premium (personal, assessoria VIP)
-- Linguagem de clientes de classe média/alta
+- Site profissional, redes sociais ativas
 - Eventos, competições, patrocínios mencionados
 
 Sinais de negócio pequeno ou sem margem:
-- Reclamações de preço alto sem resolução (indica que não investe)
-- Menções a atendimento de "um só dono" ou estrutura mínima
-- Avaliações muito curtas e genéricas (negócio sem engajamento)
-- Reclamações recorrentes sem resposta do estabelecimento
+- Reclamações sem resolução
+- Estrutura mínima, "um só dono"
+- Sem presença digital relevante
 
 3. MATURIDADE DO NEGÓCIO (peso 35%)
-- Mais de 100 reviews = negócio estabelecido (+)
-- Website próprio = investe em presença digital (+)
-- Price level 3–4 = público de maior poder aquisitivo (+)
-- Price level 1 = foco em volume, margem baixa (-)
-- Rating entre 4.2 e 4.8 = negócio bem gerido (+)
-- Rating 4.9–5.0 com poucos reviews = suspeito, pode ser fake (-)
+- Website próprio e profissional = investe em presença digital (+)
+- Presença em redes sociais com engajamento (+)
+- Múltiplas unidades ou franquias (+)
+- Negócio com equipe grande (+)
+- Negócio recém-aberto ou muito pequeno (-)
 
 CLASSIFICAÇÃO FINAL:
 - 70–100 = quente (tem perfil claro para o ticket)

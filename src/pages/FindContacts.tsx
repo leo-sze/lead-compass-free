@@ -251,15 +251,23 @@ export default function FindContacts() {
     setScoring(true);
     setScoreProgress({ current: 0, total: contacts.length });
 
-    // First, send contacts to leads table and get IDs
-    const leadsToInsert = contacts.map(c => ({
-      nome_empresa: c.companyName || "Sem nome",
-      nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
-      telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
-      site: c.website || null,
-      cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
-      fonte: "Apollo CSV",
-    }));
+    // Deduplicate by nome_empresa+telefone before upserting
+    const seen = new Set<string>();
+    const leadsToInsert = contacts
+      .map(c => ({
+        nome_empresa: c.companyName || "Sem nome",
+        nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
+        telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
+        site: c.website || null,
+        cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
+        fonte: "Apollo CSV",
+      }))
+      .filter(l => {
+        const key = `${l.nome_empresa}::${l.telefone}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
     const { data: inserted, error: insertError } = await supabase.from("leads").upsert(leadsToInsert, { onConflict: "nome_empresa,telefone", ignoreDuplicates: false }).select("id, nome_empresa, site, cidade");
     if (insertError || !inserted) {

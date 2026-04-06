@@ -245,6 +245,78 @@ export default function FindContacts() {
     navigate("/leads");
   }, [contacts, toast, navigate]);
 
+  const handleScoreAnalysis = useCallback(async () => {
+    if (contacts.length === 0) return;
+
+    setScoring(true);
+    setScoreProgress({ current: 0, total: contacts.length });
+
+    // First, send contacts to leads table and get IDs
+    const leadsToInsert = contacts.map(c => ({
+      nome_empresa: c.companyName || "Sem nome",
+      nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
+      telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
+      site: c.website || null,
+      cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
+      fonte: "Apollo CSV",
+    }));
+
+    const { data: inserted, error: insertError } = await supabase.from("leads").insert(leadsToInsert).select("id, nome_empresa, site, cidade");
+    if (insertError || !inserted) {
+      toast({ title: "Erro ao salvar leads", description: insertError?.message, variant: "destructive" });
+      setScoring(false);
+      return;
+    }
+
+    // Score in batches of 5
+    const BATCH = 5;
+    let scored = 0;
+
+    for (let i = 0; i < inserted.length; i += BATCH) {
+      const batch = inserted.slice(i, i + BATCH);
+
+      const promises = batch.map(async (lead) => {
+        try {
+          const { data: scoreData, error: scoreError } = await supabase.functions.invoke("score-lead", {
+            body: {
+              nome_empresa: lead.nome_empresa,
+              endereco: null,
+              bairro: null,
+              cidade: lead.cidade,
+              estado: null,
+              rating: null,
+              total_reviews: null,
+              website: lead.site,
+              price_level: null,
+              categoria: null,
+              reviews: [],
+            },
+          });
+
+          if (!scoreError && scoreData && !scoreData.error) {
+            await supabase.from("leads").update({
+              score: scoreData.score,
+              lead_quality: scoreData.classificacao,
+              justificativa: scoreData.justificativa,
+              sinais_positivos: scoreData.sinais_positivos,
+              sinais_negativos: scoreData.sinais_negativos,
+            } as any).eq("id", lead.id);
+          }
+        } catch (e) {
+          console.error("Score error for", lead.nome_empresa, e);
+        }
+      });
+
+      await Promise.all(promises);
+      scored += batch.length;
+      setScoreProgress({ current: scored, total: inserted.length });
+    }
+
+    setScoring(false);
+    toast({ title: "Análise concluída!", description: `${inserted.length} leads analisados pela IA.` });
+    navigate("/leads");
+  }, [contacts, toast, navigate]);
+
   const statusBadge = (status: Contact["status"]) => {
     switch (status) {
       case "has_phone":

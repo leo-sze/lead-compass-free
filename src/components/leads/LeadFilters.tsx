@@ -21,8 +21,9 @@ interface LeadFiltersProps {
   onHasSiteChange: (value: boolean) => void;
   hasInstagram: boolean;
   onHasInstagramChange: (value: boolean) => void;
+  hasDecisor: boolean;
+  onHasDecisorChange: (value: boolean) => void;
 }
-
 const LeadFilters = ({
   filter, onFilterChange,
   termos, selectedTermo, onTermoChange,

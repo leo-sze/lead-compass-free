@@ -547,6 +547,11 @@ const Leads = () => {
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>
+              {Array.from(selected).some(id => kommoStatuses[id]?.status === "success") && (
+                <Button variant="outline" size="sm" onClick={removeExportedLeads} className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
+                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => kommoStatuses[id]?.status === "success").length})
+                </Button>
+              )}
             </>
           )}
           <Button

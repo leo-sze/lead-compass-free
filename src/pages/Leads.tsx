@@ -611,6 +611,8 @@ const Leads = () => {
         onHasSiteChange={setHasSite}
         hasInstagram={hasInstagram}
         onHasInstagramChange={setHasInstagram}
+        hasDecisor={hasDecisor}
+        onHasDecisorChange={setHasDecisor}
       />
 
       {/* Quality filter tabs */}

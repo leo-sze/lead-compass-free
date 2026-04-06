@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin, Send } from "lucide-react";
+import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin, Send, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Progress as ProgressBar } from "@/components/ui/progress";
 
 interface Contact {
   firstName: string;
@@ -91,6 +92,8 @@ function rowToContact(row: Record<string, string>): Contact {
 export default function FindContacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
+  const [scoring, setScoring] = useState(false);
+  const [scoreProgress, setScoreProgress] = useState({ current: 0, total: 0 });
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [summary, setSummary] = useState<{ foundSite: number; foundPlaces: number; notFound: number } | null>(null);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
@@ -242,6 +245,78 @@ export default function FindContacts() {
     navigate("/leads");
   }, [contacts, toast, navigate]);
 
+  const handleScoreAnalysis = useCallback(async () => {
+    if (contacts.length === 0) return;
+
+    setScoring(true);
+    setScoreProgress({ current: 0, total: contacts.length });
+
+    // First, send contacts to leads table and get IDs
+    const leadsToInsert = contacts.map(c => ({
+      nome_empresa: c.companyName || "Sem nome",
+      nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
+      telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
+      site: c.website || null,
+      cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
+      fonte: "Apollo CSV",
+    }));
+
+    const { data: inserted, error: insertError } = await supabase.from("leads").insert(leadsToInsert).select("id, nome_empresa, site, cidade");
+    if (insertError || !inserted) {
+      toast({ title: "Erro ao salvar leads", description: insertError?.message, variant: "destructive" });
+      setScoring(false);
+      return;
+    }
+
+    // Score in batches of 5
+    const BATCH = 5;
+    let scored = 0;
+
+    for (let i = 0; i < inserted.length; i += BATCH) {
+      const batch = inserted.slice(i, i + BATCH);
+
+      const promises = batch.map(async (lead) => {
+        try {
+          const { data: scoreData, error: scoreError } = await supabase.functions.invoke("score-lead", {
+            body: {
+              nome_empresa: lead.nome_empresa,
+              endereco: null,
+              bairro: null,
+              cidade: lead.cidade,
+              estado: null,
+              rating: null,
+              total_reviews: null,
+              website: lead.site,
+              price_level: null,
+              categoria: null,
+              reviews: [],
+            },
+          });
+
+          if (!scoreError && scoreData && !scoreData.error) {
+            await supabase.from("leads").update({
+              score: scoreData.score,
+              lead_quality: scoreData.classificacao,
+              justificativa: scoreData.justificativa,
+              sinais_positivos: scoreData.sinais_positivos,
+              sinais_negativos: scoreData.sinais_negativos,
+            } as any).eq("id", lead.id);
+          }
+        } catch (e) {
+          console.error("Score error for", lead.nome_empresa, e);
+        }
+      });
+
+      await Promise.all(promises);
+      scored += batch.length;
+      setScoreProgress({ current: scored, total: inserted.length });
+    }
+
+    setScoring(false);
+    toast({ title: "Análise concluída!", description: `${inserted.length} leads analisados pela IA.` });
+    navigate("/leads");
+  }, [contacts, toast, navigate]);
+
   const statusBadge = (status: Contact["status"]) => {
     switch (status) {
       case "has_phone":
@@ -325,9 +400,21 @@ export default function FindContacts() {
               <Download className="mr-2 h-4 w-4" />
               Exportar CSV
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleSendToLeads} disabled={contacts.length === 0 || searching}>
+            <Button variant="secondary" size="sm" onClick={handleSendToLeads} disabled={contacts.length === 0 || searching || scoring}>
               <Send className="mr-2 h-4 w-4" />
               Enviar para Leads
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleScoreAnalysis}
+              disabled={contacts.length === 0 || searching || scoring}
+              className="bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30"
+            >
+              {scoring ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analisando {scoreProgress.current}/{scoreProgress.total}</>
+              ) : (
+                <><Sparkles className="mr-2 h-4 w-4" />Executar Análise IA</>
+              )}
             </Button>
             <Button onClick={handleSearch} disabled={searching || pendingCount === 0} size="sm">
               {searching ? (
@@ -340,6 +427,12 @@ export default function FindContacts() {
 
           {searching && (
             <Progress value={(progress.current / progress.total) * 100} className="h-2" />
+          )}
+          {scoring && (
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground">Analisando qualidade via IA... {scoreProgress.current}/{scoreProgress.total}</p>
+              <Progress value={(scoreProgress.current / scoreProgress.total) * 100} className="h-2" />
+            </div>
           )}
 
           <Card className="border-border/50 bg-card/80">

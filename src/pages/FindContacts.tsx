@@ -333,18 +333,7 @@ export default function FindContacts() {
               <Send className="mr-2 h-4 w-4" />
               Enviar para Leads
             </Button>
-            <Button
-              size="sm"
-              onClick={handleScoreAnalysis}
-              disabled={contacts.length === 0 || searching || scoring}
-              className="bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30"
-            >
-              {scoring ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analisando {scoreProgress.current}/{scoreProgress.total}</>
-              ) : (
-                <><Sparkles className="mr-2 h-4 w-4" />Executar Análise IA</>
-              )}
-            </Button>
+            
             <Button onClick={handleSearch} disabled={searching || pendingCount === 0} size="sm">
               {searching ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Buscando {progress.current} de {progress.total}...</>

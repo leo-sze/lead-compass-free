@@ -346,12 +346,6 @@ export default function FindContacts() {
           {searching && (
             <Progress value={(progress.current / progress.total) * 100} className="h-2" />
           )}
-          {scoring && (
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground">Analisando qualidade via IA... {scoreProgress.current}/{scoreProgress.total}</p>
-              <Progress value={(scoreProgress.current / scoreProgress.total) * 100} className="h-2" />
-            </div>
-          )}
 
           <Card className="border-border/50 bg-card/80">
             <CardContent className="p-0">

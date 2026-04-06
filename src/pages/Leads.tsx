@@ -207,6 +207,7 @@ const Leads = () => {
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
+    if (hasDecisor) result = result.filter((l) => l.nome_decisor);
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
   }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, qualityFilter]);

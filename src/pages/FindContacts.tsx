@@ -321,8 +321,15 @@ export default function FindContacts() {
     }
 
     setScoring(false);
-    toast({ title: "Análise concluída!", description: `${inserted.length} leads analisados pela IA.` });
-    navigate("/leads");
+    toast({ 
+      title: "Análise concluída!", 
+      description: `${scored} leads analisados pela IA.`,
+      action: (
+        <Button variant="outline" size="sm" onClick={() => navigate("/leads")}>
+          Ver Leads
+        </Button>
+      ),
+    });
   }, [contacts, toast, navigate]);
 
   const statusBadge = (status: Contact["status"]) => {

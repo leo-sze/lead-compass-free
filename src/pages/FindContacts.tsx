@@ -327,7 +327,6 @@ export default function FindContacts() {
         await new Promise(r => setTimeout(r, 1000));
       }
     }
-    }
 
     setScoring(false);
     toast({ 

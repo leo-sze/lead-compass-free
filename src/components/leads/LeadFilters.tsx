@@ -81,7 +81,7 @@ const LeadFilters = ({
             <SelectContent>
               <SelectItem value="all">Todas as fontes</SelectItem>
               {fontes.map((f) => (
-                <SelectItem key={f} value={f}>{f === "google" ? "Google Maps" : f === "linkedin" ? "LinkedIn" : f}</SelectItem>
+                <SelectItem key={f} value={f}>{f === "google" ? "Google Maps" : f === "linkedin" ? "LinkedIn" : f === "Apollo CSV" ? "Lista" : f}</SelectItem>
               ))}
             </SelectContent>
           </Select>

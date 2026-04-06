@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin, Send } from "lucide-react";
+import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin, Send, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";

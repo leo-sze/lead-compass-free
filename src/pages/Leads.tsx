@@ -375,6 +375,73 @@ const Leads = () => {
     }
   };
 
+  const bulkScoreLeads = useCallback(async () => {
+    const toScore = selected.size > 0
+      ? leads.filter(l => selected.has(l.id))
+      : filtered.filter(l => !l.score && !l.lead_quality);
+
+    if (toScore.length === 0) {
+      toast({ title: "Nenhum lead para analisar", description: selected.size > 0 ? "Leads selecionados já possuem score." : "Todos os leads exibidos já possuem score.", variant: "destructive" });
+      return;
+    }
+
+    setBulkScoring(true);
+    setBulkScoreProgress({ current: 0, total: toScore.length });
+
+    const BATCH = 2;
+    let scored = 0;
+
+    for (let i = 0; i < toScore.length; i += BATCH) {
+      const batch = toScore.slice(i, i + BATCH);
+
+      const promises = batch.map(async (lead) => {
+        try {
+          const input = lead.score_breakdown as any;
+          const { data: scoreData, error: scoreError } = await supabase.functions.invoke("score-lead", {
+            body: {
+              nome_empresa: lead.nome_empresa,
+              endereco: lead.endereco,
+              bairro: input?.bairro || null,
+              cidade: lead.cidade,
+              estado: input?.estado || null,
+              rating: input?.rating || null,
+              total_reviews: input?.total_reviews || null,
+              website: lead.site,
+              price_level: input?.price_level || null,
+              categoria: input?.categoria || null,
+              reviews: input?.reviews || [],
+            },
+          });
+
+          if (!scoreError && scoreData && !scoreData.error) {
+            const updates = {
+              score: scoreData.score,
+              lead_quality: scoreData.classificacao,
+              justificativa: scoreData.justificativa,
+              sinais_positivos: scoreData.sinais_positivos,
+              sinais_negativos: scoreData.sinais_negativos,
+            };
+            await supabase.from("leads").update(updates as any).eq("id", lead.id);
+            setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...updates } : l));
+          }
+        } catch (e) {
+          console.error("Bulk score error for", lead.nome_empresa, e);
+        }
+      });
+
+      await Promise.all(promises);
+      scored += batch.length;
+      setBulkScoreProgress({ current: scored, total: toScore.length });
+
+      if (i + BATCH < toScore.length) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    setBulkScoring(false);
+    toast({ title: "Análise concluída!", description: `${scored} leads analisados pela IA.` });
+  }, [selected, leads, filtered, toast]);
+
   const handleExportKommo = async () => {
     const { data: settings } = await supabase
       .from("settings")

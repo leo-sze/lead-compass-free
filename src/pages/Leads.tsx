@@ -688,7 +688,6 @@ const Leads = () => {
                         <Checkbox
                           checked={selected.has(lead.id)}
                           onCheckedChange={() => toggleSelect(lead.id)}
-                          disabled={isExported}
                         />
                       </TableCell>
                       <TableCell className="font-medium">{lead.nome_empresa}</TableCell>

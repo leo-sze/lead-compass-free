@@ -550,6 +550,18 @@ const Leads = () => {
               </>
             )}
           </Button>
+          <Button
+            size="sm"
+            onClick={bulkScoreLeads}
+            disabled={bulkScoring || enriching}
+            className="bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30"
+          >
+            {bulkScoring ? (
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Analisando {bulkScoreProgress.current}/{bulkScoreProgress.total}</>
+            ) : (
+              <><Sparkles className="h-4 w-4 mr-1" />Executar Análise IA {selected.size > 0 ? `(${selected.size})` : ""}</>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>

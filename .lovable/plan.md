@@ -1,49 +1,70 @@
 
 
-# Refatorar enrich-lead: estratégia de 3 estágios (CNPJ → BrasilAPI → IA)
+# Reconfigurar processo de análise IA para leads de lista
 
-## Resumo
+## Problema atual
 
-Substituir a lógica atual (múltiplas buscas paralelas + IA para tudo) por 3 estágios sequenciais e determinísticos. O nome_decisor passa a vir primariamente da BrasilAPI (QSA/quadro societário), que é gratuita e confiável. A IA só entra como último recurso.
+O `score-lead` para leads sem dados do Google Maps faz uma busca genérica `"nome empresa avaliações Google Maps"` que frequentemente retorna resultados irrelevantes. O site da empresa muitas vezes está vazio, então o scrape do site nem roda. Resultado: a IA recebe contexto pobre e dá notas incorretas.
 
-## Estágio 1 — Encontrar CNPJ
-- Busca Firecrawl: `"{nome_empresa}" "{cidade}" CNPJ`
-- Regex para extrair CNPJ do texto retornado
-- Fallback: segunda busca com `site:casadosdados.com.br`
-- CNPJ salvo no campo `cnpj` dos updates
+## Nova estratégia: pesquisa em 3 etapas
 
-## Estágio 2 — BrasilAPI (QSA)
-- `GET https://brasilapi.com.br/api/cnpj/v1/{cnpj_limpo}` (sem auth)
-- Seleciona decisor do array `qsa` por prioridade de qualificação (Administrador > Diretor/Presidente > Sócio > primeiro)
-- Aproveita telefone, endereço, cidade da resposta se vazios
-- Ignora empresa com situação "BAIXADA" ou "INAPTA"
-- Retry 1x com 2s delay em caso de 429
+```text
+Etapa 1: Encontrar o site real da empresa (Firecrawl search)
+   ↓
+Etapa 2: Scrape do site encontrado + busca de reputação (paralelo)
+   ↓
+Etapa 3: IA analisa com contexto rico (site + reputação + redes sociais)
+```
 
-## Estágio 3 — Fallback IA (só se decisor ainda vazio)
-- UMA busca Firecrawl: `"{nome_empresa}" "{cidade}" fundador OR proprietário OR CEO OR diretor`
-- Chamada Gemini com prompt restritivo para extrair apenas nome de pessoa real
-- Se retornar null, deixa nome_decisor vazio
+## Mudanças no `score-lead/index.ts`
 
-## Campos não-decisor (site, instagram, linkedin)
-- Mantém a lógica existente de busca web + IA para esses campos, executada em paralelo com o Estágio 1
-- A IA do Estágio 3 NÃO substitui essa parte — ela só busca nome_decisor
+### 1. Nova função `findCompanyWebsite(nome, cidade)`
+- Busca Firecrawl: `"{nome}" "{cidade}" site oficial`
+- Retorna a URL do primeiro resultado que pareça ser o site da empresa (não redes sociais, não diretórios)
 
-## O que muda no arquivo
+### 2. Nova função `searchReputation(nome, cidade)`
+- Busca Firecrawl: `"{nome}" "{cidade}" avaliações OR opinião OR review`
+- Mais focada em reputação real do que a busca atual por "Google Maps"
 
-| Aspecto | Antes | Depois |
-|---------|-------|--------|
-| Busca de decisor | 7 buscas paralelas + IA genérica | CNPJ → BrasilAPI → 1 busca + IA focada |
-| Fonte principal | Scraping genérico | BrasilAPI (dados oficiais da Receita) |
-| Chamadas Firecrawl | 7 em paralelo | 2-3 sequenciais (CNPJ) + 1-2 para outros campos |
-| Input schema | Sem campo cnpj | Adiciona `cnpj` opcional ao BodySchema |
-| Output | Mesmo formato | Mesmo formato, `cnpj` adicionado ao `updates` |
+### 3. Nova função `searchSocialMedia(nome, cidade)`
+- Busca Firecrawl: `"{nome}" "{cidade}" instagram OR facebook OR linkedin`
+- Coleta presença em redes sociais
 
-## Detalhes técnicos
+### 4. Refatorar fluxo `!hasRealData`
+Em vez do fluxo atual (1 busca Google Maps + 1 scrape opcional):
 
-- Novo campo no BodySchema: `cnpj: z.string().nullable().optional()`
-- Nova função `findCnpj(nome, cidade, apiKey)` → string | null
-- Nova função `queryBrasilApi(cnpj)` → objeto com qsa, telefone, endereço etc.
-- Nova função `selectDecisor(qsa)` → nome do decisor
-- Busca de campos gerais (site, instagram, linkedin, telefone) continua via scrape + IA como antes, mas em paralelo e sem incluir nome_decisor
-- Logging com prefixos `[CNPJ]`, `[QSA]`, `[IA]`
+```text
+1. findCompanyWebsite → URL do site
+2. Em paralelo:
+   a. searchCompanyWebsite(URL encontrada ou website do lead)
+   b. searchReputation(nome, cidade)
+   c. searchSocialMedia(nome, cidade)
+3. Montar contexto rico com seções separadas
+4. Enviar à IA com prompt atualizado
+```
+
+### 5. Prompt melhorado para leads pesquisados
+- Instruir a IA a identificar explicitamente qual é o site real da empresa
+- Pedir que valide se os dados encontrados realmente pertencem à empresa em questão
+- Adicionar campo `website_encontrado` no retorno da tool call para salvar no banco
+
+### 6. Retornar site encontrado
+- Adicionar `website_encontrado` ao response JSON do score-lead
+- No frontend (Leads.tsx), atualizar o campo `site` do lead se estiver vazio e o score-lead retornar um site
+
+## Mudanças no frontend (`Leads.tsx`)
+
+- Na função `bulkScoreLeads` e `reAnalyzeLead`: se `scoreData.website_encontrado` existir e o lead não tiver site, salvar no campo `site` do lead
+
+## Arquivos alterados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `supabase/functions/score-lead/index.ts` | Novas funções de pesquisa, fluxo em 3 etapas, prompt melhorado, retorno de website |
+| `src/pages/Leads.tsx` | Salvar `website_encontrado` no lead após análise |
+
+## O que NÃO muda
+- Fluxo de leads do Google Maps (que já têm reviews/rating) permanece igual
+- Função `enrich-lead` não é alterada
+- Filtros, UI de score, exportação Kommo — tudo mantido
 

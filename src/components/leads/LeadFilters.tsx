@@ -21,8 +21,9 @@ interface LeadFiltersProps {
   onHasSiteChange: (value: boolean) => void;
   hasInstagram: boolean;
   onHasInstagramChange: (value: boolean) => void;
+  hasDecisor: boolean;
+  onHasDecisorChange: (value: boolean) => void;
 }
-
 const LeadFilters = ({
   filter, onFilterChange,
   termos, selectedTermo, onTermoChange,
@@ -31,6 +32,7 @@ const LeadFilters = ({
   hasPhone, onHasPhoneChange,
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
+  hasDecisor, onHasDecisorChange,
 }: LeadFiltersProps) => {
   return (
     <div className="space-y-3">
@@ -99,6 +101,10 @@ const LeadFilters = ({
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={hasInstagram} onCheckedChange={(v) => onHasInstagramChange(!!v)} />
           Com Instagram
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={hasDecisor} onCheckedChange={(v) => onHasDecisorChange(!!v)} />
+          Com decisor
         </label>
       </div>
     </div>

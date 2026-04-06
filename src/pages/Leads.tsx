@@ -114,6 +114,7 @@ const Leads = () => {
   const [hasPhone, setHasPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
+  const [hasDecisor, setHasDecisor] = useState(false);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
@@ -206,6 +207,7 @@ const Leads = () => {
     if (hasPhone) result = result.filter((l) => l.telefone);
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
+    if (hasDecisor) result = result.filter((l) => l.nome_decisor);
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
   }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, qualityFilter]);
@@ -609,6 +611,8 @@ const Leads = () => {
         onHasSiteChange={setHasSite}
         hasInstagram={hasInstagram}
         onHasInstagramChange={setHasInstagram}
+        hasDecisor={hasDecisor}
+        onHasDecisorChange={setHasDecisor}
       />
 
       {/* Quality filter tabs */}

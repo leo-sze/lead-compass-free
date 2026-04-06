@@ -276,8 +276,8 @@ export default function FindContacts() {
       return;
     }
 
-    // Score in batches of 5
-    const BATCH = 5;
+    // Score in batches of 2 (research-heavy for list leads)
+    const BATCH = 2;
     let scored = 0;
 
     for (let i = 0; i < inserted.length; i += BATCH) {

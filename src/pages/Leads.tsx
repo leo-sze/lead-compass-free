@@ -114,6 +114,7 @@ const Leads = () => {
   const [hasPhone, setHasPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
+  const [hasDecisor, setHasDecisor] = useState(false);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."

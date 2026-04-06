@@ -32,6 +32,7 @@ const LeadFilters = ({
   hasPhone, onHasPhoneChange,
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
+  hasDecisor, onHasDecisorChange,
 }: LeadFiltersProps) => {
   return (
     <div className="space-y-3">

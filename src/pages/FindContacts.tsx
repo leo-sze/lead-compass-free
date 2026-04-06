@@ -261,7 +261,7 @@ export default function FindContacts() {
       fonte: "Apollo CSV",
     }));
 
-    const { data: inserted, error: insertError } = await supabase.from("leads").insert(leadsToInsert).select("id, nome_empresa, site, cidade");
+    const { data: inserted, error: insertError } = await supabase.from("leads").upsert(leadsToInsert, { onConflict: "nome_empresa,telefone", ignoreDuplicates: false }).select("id, nome_empresa, site, cidade");
     if (insertError || !inserted) {
       toast({ title: "Erro ao salvar leads", description: insertError?.message, variant: "destructive" });
       setScoring(false);

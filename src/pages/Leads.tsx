@@ -373,15 +373,18 @@ const Leads = () => {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      const updates = {
+      const updates: any = {
         score: data.score,
         lead_quality: data.classificacao,
         justificativa: data.justificativa,
         sinais_positivos: data.sinais_positivos,
         sinais_negativos: data.sinais_negativos,
       };
+      if (data.website_encontrado && !lead.site) {
+        updates.site = data.website_encontrado;
+      }
 
-      await supabase.from("leads").update(updates as any).eq("id", lead.id);
+      await supabase.from("leads").update(updates).eq("id", lead.id);
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
       toast({ title: `Score atualizado: ${data.score} (${data.classificacao})` });
     } catch (e: any) {

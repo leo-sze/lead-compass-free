@@ -102,6 +102,10 @@ const LeadFilters = ({
           <Checkbox checked={hasInstagram} onCheckedChange={(v) => onHasInstagramChange(!!v)} />
           Com Instagram
         </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={hasDecisor} onCheckedChange={(v) => onHasDecisorChange(!!v)} />
+          Com decisor
+        </label>
       </div>
     </div>
   );

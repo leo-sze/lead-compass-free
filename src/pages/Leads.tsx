@@ -683,7 +683,7 @@ const Leads = () => {
                   const isExported = ks?.status === "success";
                   const isScoring = reAnalyzing.has(lead.id);
                   return (
-                    <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-70" : ""}`}>
+                    <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-50 bg-green-500/5" : ""}`}>
                       <TableCell>
                         <Checkbox
                           checked={selected.has(lead.id)}

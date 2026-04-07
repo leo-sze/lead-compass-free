@@ -2,6 +2,12 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon, X } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface LeadFiltersProps {
   filter: string;
@@ -23,6 +29,10 @@ interface LeadFiltersProps {
   onHasInstagramChange: (value: boolean) => void;
   hasDecisor: boolean;
   onHasDecisorChange: (value: boolean) => void;
+  dateFrom: Date | undefined;
+  onDateFromChange: (value: Date | undefined) => void;
+  dateTo: Date | undefined;
+  onDateToChange: (value: Date | undefined) => void;
 }
 const LeadFilters = ({
   filter, onFilterChange,

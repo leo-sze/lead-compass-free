@@ -808,6 +808,9 @@ const Leads = () => {
                           {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte === "b2bleads" ? "B2BLeads" : lead.fonte || "—"}
                         </span>
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(lead.created_at).toLocaleDateString("pt-BR")}
+                      </TableCell>
                       <TableCell>
                         {ks?.status === "success" && (
                           <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 text-xs">

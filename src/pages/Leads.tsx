@@ -550,6 +550,19 @@ const Leads = () => {
 
   return (
     <div className="space-y-6">
+      <Tabs defaultValue="leads" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="leads">📋 Leads</TabsTrigger>
+          <TabsTrigger value="b2bleads" className="flex items-center gap-1">
+            <Database className="h-4 w-4" /> B2BLeads
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="b2bleads">
+          <B2BLeadsImport onImportComplete={fetchLeads} />
+        </TabsContent>
+
+        <TabsContent value="leads">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Leads</h1>

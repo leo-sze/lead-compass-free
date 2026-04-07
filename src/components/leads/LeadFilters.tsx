@@ -2,6 +2,12 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { CalendarIcon, X } from "lucide-react";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 interface LeadFiltersProps {
   filter: string;
@@ -23,6 +29,10 @@ interface LeadFiltersProps {
   onHasInstagramChange: (value: boolean) => void;
   hasDecisor: boolean;
   onHasDecisorChange: (value: boolean) => void;
+  dateFrom: Date | undefined;
+  onDateFromChange: (value: Date | undefined) => void;
+  dateTo: Date | undefined;
+  onDateToChange: (value: Date | undefined) => void;
 }
 const LeadFilters = ({
   filter, onFilterChange,
@@ -33,6 +43,8 @@ const LeadFilters = ({
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
   hasDecisor, onHasDecisorChange,
+  dateFrom, onDateFromChange,
+  dateTo, onDateToChange,
 }: LeadFiltersProps) => {
   return (
     <div className="space-y-3">
@@ -73,7 +85,37 @@ const LeadFilters = ({
               ))}
             </SelectContent>
           </Select>
+        <div className="min-w-[150px]">
+          <Label className="text-xs text-muted-foreground mb-1">Data de</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-secondary/50", !dateFrom && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateFrom ? format(dateFrom, "dd/MM/yyyy") : "Início"}
+                {dateFrom && <X className="ml-auto h-3 w-3 cursor-pointer" onClick={(e) => { e.stopPropagation(); onDateFromChange(undefined); }} />}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateFrom} onSelect={onDateFromChange} initialFocus className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
         </div>
+        <div className="min-w-[150px]">
+          <Label className="text-xs text-muted-foreground mb-1">Data até</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className={cn("w-full justify-start text-left font-normal bg-secondary/50", !dateTo && "text-muted-foreground")}>
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {dateTo ? format(dateTo, "dd/MM/yyyy") : "Fim"}
+                {dateTo && <X className="ml-auto h-3 w-3 cursor-pointer" onClick={(e) => { e.stopPropagation(); onDateToChange(undefined); }} />}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar mode="single" selected={dateTo} onSelect={onDateToChange} initialFocus className={cn("p-3 pointer-events-auto")} />
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
         <div className="min-w-[140px]">
           <Label className="text-xs text-muted-foreground mb-1">Fonte</Label>
           <Select value={selectedFonte} onValueChange={onFonteChange}>

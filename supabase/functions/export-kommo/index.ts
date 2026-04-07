@@ -108,10 +108,16 @@ Deno.serve(async (req) => {
           });
         }
 
+        // Build tags from lead.tags array
+        const tags = Array.isArray(lead.tags) && lead.tags.length > 0
+          ? lead.tags.map((t: string) => ({ name: t }))
+          : [];
+
         return {
           name: `${lead.nome_decisor || ""} — ${lead.nome_empresa}`.trim().replace(/^— /, ""),
           pipeline_id: parseInt(pipelineId),
-          _embedded: {
+          ...(tags.length > 0 ? { _embedded: {
+            tags,
             contacts: [
               {
                 first_name: lead.nome_decisor?.split(" ")[0] || lead.nome_empresa,
@@ -125,7 +131,21 @@ Deno.serve(async (req) => {
                 custom_fields_values: companyFields,
               },
             ],
-          },
+          } } : { _embedded: {
+            contacts: [
+              {
+                first_name: lead.nome_decisor?.split(" ")[0] || lead.nome_empresa,
+                last_name: lead.nome_decisor?.split(" ").slice(1).join(" ") || "",
+                custom_fields_values: contactFields,
+              },
+            ],
+            companies: [
+              {
+                name: lead.nome_empresa,
+                custom_fields_values: companyFields,
+              },
+            ],
+          } }),
         };
       });
 

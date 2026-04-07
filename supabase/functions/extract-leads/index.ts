@@ -307,6 +307,15 @@ function parseAddressParts(address: string | null): { bairro: string | null; est
   return { bairro, estado };
 }
 
+function normalizePhone(phone: string | null): string | null {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.length === 0) return null;
+  if (digits.startsWith("55") && digits.length >= 12) digits = digits.slice(2);
+  if (digits.length < 10 || digits.length > 11) return `+55${digits}`;
+  return `+55${digits}`;
+}
+
 function parseGoogleMapsResult(r: any) {
   const priceStr = r.price || "";
   const priceLevel = priceStr.length || (r.price_level ?? null);
@@ -315,7 +324,7 @@ function parseGoogleMapsResult(r: any) {
 
   return {
     nome_empresa: r.title || r.name || "Sem nome",
-    telefone: r.phone || null,
+    telefone: normalizePhone(r.phone || null),
     site: r.website || r.link || null,
     endereco: address,
     instagram: extractSocialLink(r, "instagram"),

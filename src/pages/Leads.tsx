@@ -743,6 +743,7 @@ const Leads = () => {
                 <TableHead>Redes</TableHead>
                 <TableHead>Cidade</TableHead>
                 <TableHead>Fonte</TableHead>
+                <TableHead>Data</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>

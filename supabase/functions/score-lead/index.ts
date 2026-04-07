@@ -247,7 +247,20 @@ Sinais negativos: reclamações sem resolução, estrutura mínima, sem presenç
 - Negócio recém-aberto ou muito pequeno (-)
 
 CLASSIFICAÇÃO FINAL:
-- 70–100 = quente | 40–69 = morno | 20–39 = frio | 0–19 = desqualificado`;
+- 70–100 = quente | 40–69 = morno | 20–39 = frio | 0–19 = desqualificado
+
+4. TAG DE CLASSIFICAÇÃO (obrigatório)
+Escolha EXATAMENTE UMA tag que melhor descreve o tipo de negócio:
+- B2B - FABRICANTE (fábricas, indústrias que produzem produtos)
+- B2B - DISTRIBUIDOR (distribuidores, atacadistas, representantes)
+- B2C - LOJA (lojas de varejo, e-commerce)
+- B2C - ESCOLA (escolas, cursos, instituições de ensino)
+- B2C - ACADEMIA (academias, estúdios fitness, CrossFit)
+- B2C - QUADRA (quadras esportivas, campos, arenas)
+- B2C - CLINICA (clínicas, consultórios, centros de saúde)
+- B2B - ORGANIZADOR DE PROVA (organizadores de eventos esportivos, provas, corridas)
+- B2B - GESTÃO (empresas de gestão, consultoria, software)
+- B2C - ASSESSORIA ESPORTIVA (assessorias esportivas, treinamento personalizado)`;
 
     const toolParams: any = {
       type: "object",
@@ -257,8 +270,9 @@ CLASSIFICAÇÃO FINAL:
         justificativa: { type: "string", description: "2-3 frases diretas explicando a nota" },
         sinais_positivos: { type: "array", items: { type: "string" } },
         sinais_negativos: { type: "array", items: { type: "string" } },
+        tag: { type: "string", enum: ["B2B - FABRICANTE", "B2B - DISTRIBUIDOR", "B2C - LOJA", "B2C - ESCOLA", "B2C - ACADEMIA", "B2C - QUADRA", "B2C - CLINICA", "B2B - ORGANIZADOR DE PROVA", "B2B - GESTÃO", "B2C - ASSESSORIA ESPORTIVA"], description: "Tag de classificação do tipo de negócio" },
       },
-      required: ["score", "classificacao", "justificativa", "sinais_positivos", "sinais_negativos"],
+      required: ["score", "classificacao", "justificativa", "sinais_positivos", "sinais_negativos", "tag"],
       additionalProperties: false,
     };
 
@@ -312,6 +326,7 @@ CLASSIFICAÇÃO FINAL:
       sinais_positivos: Array.isArray(result.sinais_positivos) ? result.sinais_positivos : [],
       sinais_negativos: Array.isArray(result.sinais_negativos) ? result.sinais_negativos : [],
       website_encontrado: websiteEncontrado || result.website_encontrado || null,
+      tag: result.tag || null,
     });
 
   } catch (error: unknown) {

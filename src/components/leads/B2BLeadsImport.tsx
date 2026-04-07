@@ -17,7 +17,7 @@ const ESTADOS_BR = [
 ];
 
 const PORTES = [
-  { value: "", label: "Todos" },
+  { value: "TODOS", label: "Todos" },
   { value: "MEI", label: "Microempreendedor Individual" },
   { value: "ME", label: "Microempresa" },
   { value: "EPP", label: "Empresa de Pequeno Porte" },
@@ -86,7 +86,7 @@ export default function B2BLeadsImport({ onImportComplete }: B2BLeadsImportProps
           ramo,
           estado,
           cidade: cidade || undefined,
-          porte: porte || undefined,
+          porte: porte && porte !== "TODOS" ? porte : undefined,
           data_abertura_de: dataAberturaDE || undefined,
           data_abertura_ate: dataAberturaAte || undefined,
           limite,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,8 @@ import { normalizePhone } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
+import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
@@ -548,6 +550,19 @@ const Leads = () => {
 
   return (
     <div className="space-y-6">
+      <Tabs defaultValue="leads" className="w-full">
+        <TabsList className="mb-4">
+          <TabsTrigger value="leads">📋 Leads</TabsTrigger>
+          <TabsTrigger value="b2bleads" className="flex items-center gap-1">
+            <Database className="h-4 w-4" /> B2BLeads
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="b2bleads">
+          <B2BLeadsImport onImportComplete={fetchLeads} />
+        </TabsContent>
+
+        <TabsContent value="leads">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Leads</h1>
@@ -739,8 +754,12 @@ const Leads = () => {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{lead.cidade || "—"}</TableCell>
                       <TableCell>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${lead.fonte === "linkedin" ? "bg-blue-500/10 text-blue-400" : "bg-primary/10 text-primary"}`}>
-                          {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte || "—"}
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          lead.fonte === "linkedin" ? "bg-blue-500/10 text-blue-400" :
+                          lead.fonte === "b2bleads" ? "bg-purple-500/10 text-purple-400" :
+                          "bg-primary/10 text-primary"
+                        }`}>
+                          {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte === "b2bleads" ? "B2BLeads" : lead.fonte || "—"}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -922,6 +941,8 @@ const Leads = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

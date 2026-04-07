@@ -34,6 +34,7 @@ export type Database = {
           sinais_negativos: Json | null
           sinais_positivos: Json | null
           site: string | null
+          tags: string[] | null
           telefone: string | null
           termo_pesquisa: string | null
         }
@@ -56,6 +57,7 @@ export type Database = {
           sinais_negativos?: Json | null
           sinais_positivos?: Json | null
           site?: string | null
+          tags?: string[] | null
           telefone?: string | null
           termo_pesquisa?: string | null
         }
@@ -78,6 +80,7 @@ export type Database = {
           sinais_negativos?: Json | null
           sinais_positivos?: Json | null
           site?: string | null
+          tags?: string[] | null
           telefone?: string | null
           termo_pesquisa?: string | null
         }

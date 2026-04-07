@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { normalizePhone } from "@/lib/utils";
 import { Upload, Search, Download, Phone, AlertCircle, CheckCircle2, MinusCircle, Loader2, Globe, MapPin, Send } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -228,7 +229,7 @@ export default function FindContacts() {
     const leadsToInsert = contacts.map(c => ({
       nome_empresa: c.companyName || "Sem nome",
       nome_decisor: [c.firstName, c.lastName].filter(Boolean).join(" ") || null,
-      telefone: c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null,
+      telefone: normalizePhone(c.foundPhone || c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || null),
       site: c.website || null,
       cidade: [c.city, c.state, c.country].filter(Boolean).join(", ") || null,
       fonte: "Apollo CSV",

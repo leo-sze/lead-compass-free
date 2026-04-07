@@ -937,6 +937,8 @@ const Leads = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

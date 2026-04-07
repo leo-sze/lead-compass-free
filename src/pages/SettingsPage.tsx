@@ -45,6 +45,11 @@ const SettingsPage = () => {
         if (row.key === "kommo_subdomain") setKommoSubdomain(row.value || "");
         if (row.key === "kommo_api_token") setKommoToken(row.value || "");
         if (row.key === "kommo_pipeline_id") setKommoPipelineId(row.value || "");
+        if (row.key === "b2bleads_cookie") {
+          setB2bCookie(row.value || "");
+          if (row.value) setB2bValid(true);
+        }
+        if (row.key === "b2bleads_last_validation") setB2bLastValidation(row.value || null);
       }
     }
   };
@@ -68,6 +73,7 @@ const SettingsPage = () => {
       await saveSetting("kommo_subdomain", kommoSubdomain);
       await saveSetting("kommo_api_token", kommoToken);
       await saveSetting("kommo_pipeline_id", kommoPipelineId);
+      await saveSetting("b2bleads_cookie", b2bCookie);
       toast({ title: "Configurações salvas!" });
     } catch {
       toast({ title: "Erro ao salvar", variant: "destructive" });

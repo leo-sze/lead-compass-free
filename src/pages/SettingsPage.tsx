@@ -81,6 +81,33 @@ const SettingsPage = () => {
     setSaving(false);
   };
 
+  const testB2bConnection = async () => {
+    if (!b2bCookie) {
+      toast({ title: "Insira o cookie primeiro", variant: "destructive" });
+      return;
+    }
+    setTestingB2b(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("scrape-b2bleads", {
+        body: { cookie: b2bCookie, ramo: "test", estado: "SP", limite: 1 },
+      });
+      if (error || data?.error?.includes("expirad") || data?.error?.includes("login")) {
+        setB2bValid(false);
+        toast({ title: "Cookie inválido ou expirado", variant: "destructive" });
+      } else {
+        setB2bValid(true);
+        const now = new Date().toISOString();
+        setB2bLastValidation(now);
+        await saveSetting("b2bleads_last_validation", now);
+        toast({ title: "Conexão B2BLeads validada!" });
+      }
+    } catch {
+      setB2bValid(false);
+      toast({ title: "Erro ao testar conexão", variant: "destructive" });
+    }
+    setTestingB2b(false);
+  };
+
   const previewMessage = whatsappTemplate
     .replace(/{nome_empresa}/g, "Restaurante Exemplo")
     .replace(/{telefone}/g, "11999999999")
@@ -250,7 +277,75 @@ const SettingsPage = () => {
       <Card className="border-border/50 bg-card/80">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-green-400" />
+            <Database className="h-5 w-5 text-primary" />
+            B2BLeads
+          </CardTitle>
+          <CardDescription>
+            Importe leads diretamente do b2bleads.com.br usando seu cookie de sessão.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Cookie de sessão</label>
+            <div className="relative">
+              <Input
+                type={showB2bCookie ? "text" : "password"}
+                placeholder="Cole o cookie laravel_session aqui..."
+                value={b2bCookie}
+                onChange={(e) => setB2bCookie(e.target.value)}
+                className="pr-10 bg-secondary/50 font-mono"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setShowB2bCookie(!showB2bCookie)}
+              >
+                {showB2bCookie ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Como obter: faça login em b2bleads.com.br → F12 → Application → Cookies → copie o valor do cookie chamado <code className="bg-secondary px-1 rounded">laravel_session</code>
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={testB2bConnection}
+              disabled={testingB2b || !b2bCookie}
+            >
+              {testingB2b ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Testando...</>
+              ) : (
+                "Testar conexão"
+              )}
+            </Button>
+            {b2bValid === true && (
+              <span className="flex items-center gap-1 text-xs text-green-400">
+                <CheckCircle2 className="h-3 w-3" /> Válido
+              </span>
+            )}
+            {b2bValid === false && (
+              <span className="flex items-center gap-1 text-xs text-destructive">
+                <AlertCircle className="h-3 w-3" /> Inválido/expirado
+              </span>
+            )}
+          </div>
+
+          {b2bLastValidation && (
+            <p className="text-xs text-muted-foreground">
+              Última validação: {new Date(b2bLastValidation).toLocaleString("pt-BR")}
+              {(Date.now() - new Date(b2bLastValidation).getTime()) > 24 * 60 * 60 * 1000 && (
+                <Badge variant="outline" className="ml-2 bg-yellow-500/10 text-yellow-400 border-yellow-500/30 text-xs">
+                  ⚠️ Há mais de 24h
+                </Badge>
+              )}
+            </p>
+          )}
+        </CardContent>
+      </Card>
             Mensagem WhatsApp
           </CardTitle>
           <CardDescription>

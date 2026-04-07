@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw } from "lucide-react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,8 @@ import { normalizePhone } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
+import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;

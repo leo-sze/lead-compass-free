@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { normalizePhone } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
@@ -383,6 +384,9 @@ const Leads = () => {
       if (data.website_encontrado && !lead.site) {
         updates.site = data.website_encontrado;
       }
+      if (data.tag) {
+        updates.tags = [data.tag];
+      }
 
       await supabase.from("leads").update(updates).eq("id", lead.id);
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
@@ -446,6 +450,9 @@ const Leads = () => {
             };
             if (scoreData.website_encontrado && !lead.site) {
               updates.site = scoreData.website_encontrado;
+            }
+            if (scoreData.tag) {
+              updates.tags = [scoreData.tag];
             }
             await supabase.from("leads").update(updates).eq("id", lead.id);
             setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...updates } : l));

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Key, MessageCircle, Eye, EyeOff, Building2 } from "lucide-react";
+import { Save, Key, MessageCircle, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +18,11 @@ const SettingsPage = () => {
   const [kommoToken, setKommoToken] = useState("");
   const [showKommoToken, setShowKommoToken] = useState(false);
   const [kommoPipelineId, setKommoPipelineId] = useState("");
+  const [b2bCookie, setB2bCookie] = useState("");
+  const [showB2bCookie, setShowB2bCookie] = useState(false);
+  const [b2bLastValidation, setB2bLastValidation] = useState<string | null>(null);
+  const [testingB2b, setTestingB2b] = useState(false);
+  const [b2bValid, setB2bValid] = useState<boolean | null>(null);
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
   );

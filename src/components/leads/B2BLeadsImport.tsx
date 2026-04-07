@@ -17,7 +17,7 @@ const ESTADOS_BR = [
 ];
 
 const PORTES = [
-  { value: "", label: "Todos" },
+  { value: "TODOS", label: "Todos" },
   { value: "MEI", label: "Microempreendedor Individual" },
   { value: "ME", label: "Microempresa" },
   { value: "EPP", label: "Empresa de Pequeno Porte" },

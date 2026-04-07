@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database } from "lucide-react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database, Copy } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -118,6 +118,8 @@ const Leads = () => {
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
   const [hasDecisor, setHasDecisor] = useState(false);
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
   const [whatsappTemplate, setWhatsappTemplate] = useState(
     "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
@@ -211,9 +213,19 @@ const Leads = () => {
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter((l) => new Date(l.created_at) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter((l) => new Date(l.created_at) <= to);
+    }
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, qualityFilter]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -618,6 +630,14 @@ const Leads = () => {
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={deleteDuplicates}
+            className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
+          >
+            <Copy className="h-4 w-4 mr-1" /> Excluir duplicatas
+          </Button>
         </div>
       </div>
 
@@ -641,9 +661,11 @@ const Leads = () => {
         onHasInstagramChange={setHasInstagram}
         hasDecisor={hasDecisor}
         onHasDecisorChange={setHasDecisor}
+        dateFrom={dateFrom}
+        onDateFromChange={setDateFrom}
+        dateTo={dateTo}
+        onDateToChange={setDateTo}
       />
-
-      {/* Quality filter tabs */}
       <div className="flex gap-2 flex-wrap">
         {([
           { value: "quente" as QualityFilter, label: "🔥 Quente", cls: "bg-green-500/10 text-green-400 border-green-500/30" },

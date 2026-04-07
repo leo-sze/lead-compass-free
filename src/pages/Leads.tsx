@@ -308,6 +308,29 @@ const Leads = () => {
     toast({ title: `${ids.length} leads removidos` });
   };
 
+  const deleteDuplicates = async () => {
+    const seen = new Map<string, string>();
+    const duplicateIds: string[] = [];
+    for (const lead of leads) {
+      const key = lead.nome_empresa.trim().toLowerCase();
+      if (seen.has(key)) {
+        duplicateIds.push(lead.id);
+      } else {
+        seen.set(key, lead.id);
+      }
+    }
+    if (duplicateIds.length === 0) {
+      toast({ title: "Nenhuma duplicata encontrada" });
+      return;
+    }
+    for (let i = 0; i < duplicateIds.length; i += 100) {
+      const batch = duplicateIds.slice(i, i + 100);
+      await supabase.from("leads").delete().in("id", batch);
+    }
+    setLeads((prev) => prev.filter((l) => !duplicateIds.includes(l.id)));
+    toast({ title: `${duplicateIds.length} duplicatas removidas` });
+  };
+
   const enrichLeads = useCallback(async () => {
     const toEnrich = selected.size > 0 ? selectedLeads : filtered;
     if (toEnrich.length === 0) return;

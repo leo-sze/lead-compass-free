@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { normalizePhone } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
 const GoogleSearch = () => {
@@ -65,7 +66,7 @@ const GoogleSearch = () => {
         const { data: saved, error: insertError } = await supabase.from("leads").upsert(
           {
             nome_empresa: lead.nome_empresa,
-            telefone: lead.telefone || null,
+            telefone: normalizePhone(lead.telefone || null),
             site: lead.site || null,
             endereco: lead.endereco || null,
             instagram: lead.instagram || null,

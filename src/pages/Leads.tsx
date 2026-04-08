@@ -668,6 +668,8 @@ const Leads = () => {
                   </div>
                 </PopoverContent>
               </Popover>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"

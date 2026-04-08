@@ -21,6 +21,8 @@ import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;

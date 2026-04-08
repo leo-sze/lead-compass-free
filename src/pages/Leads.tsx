@@ -646,8 +646,28 @@ const Leads = () => {
                   <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => kommoStatuses[id]?.status === "success").length})
                 </Button>
               )}
-            </>
-          )}
+              <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-accent/50 text-accent hover:bg-accent/10">
+                    <Tag className="h-4 w-4 mr-1" /> Adicionar tag ({selected.size})
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="start">
+                  <p className="text-xs text-muted-foreground mb-2">Adicionar tag aos {selected.size} leads selecionados</p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nome da tag..."
+                      value={bulkTagInput}
+                      onChange={(e) => setBulkTagInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addTagToSelected(bulkTagInput)}
+                      className="h-8 text-sm bg-secondary/50"
+                    />
+                    <Button size="sm" className="h-8" onClick={() => addTagToSelected(bulkTagInput)} disabled={!bulkTagInput.trim()}>
+                      Aplicar
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
           <Button
             variant="outline"
             size="sm"

@@ -335,6 +335,31 @@ const Leads = () => {
     toast({ title: `${duplicateIds.length} duplicatas removidas` });
   };
 
+  const addTagToSelected = async (tag: string) => {
+    if (!tag.trim() || selected.size === 0) return;
+    const ids = Array.from(selected);
+    for (let i = 0; i < ids.length; i += 100) {
+      const batch = ids.slice(i, i + 100);
+      const batchLeads = leads.filter(l => batch.includes(l.id));
+      for (const lead of batchLeads) {
+        const currentTags = lead.tags || [];
+        if (!currentTags.includes(tag.trim())) {
+          await supabase.from("leads").update({ tags: [...currentTags, tag.trim()] }).eq("id", lead.id);
+        }
+      }
+    }
+    setLeads(prev => prev.map(l => {
+      if (selected.has(l.id)) {
+        const currentTags = l.tags || [];
+        return currentTags.includes(tag.trim()) ? l : { ...l, tags: [...currentTags, tag.trim()] };
+      }
+      return l;
+    }));
+    setBulkTagInput("");
+    setShowTagPopover(false);
+    toast({ title: `Tag "${tag.trim()}" adicionada a ${ids.length} leads` });
+  };
+
   const enrichLeads = useCallback(async () => {
     const toEnrich = selected.size > 0 ? selectedLeads : filtered;
     if (toEnrich.length === 0) return;

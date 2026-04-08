@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database, Copy } from "lucide-react";
+import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database, Copy, Tag } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
@@ -129,6 +131,8 @@ const Leads = () => {
   const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
   const [bulkScoring, setBulkScoring] = useState(false);
   const [bulkScoreProgress, setBulkScoreProgress] = useState({ current: 0, total: 0 });
+  const [bulkTagInput, setBulkTagInput] = useState("");
+  const [showTagPopover, setShowTagPopover] = useState(false);
   const { toast } = useToast();
 
   // Kommo export state
@@ -329,6 +333,31 @@ const Leads = () => {
     }
     setLeads((prev) => prev.filter((l) => !duplicateIds.includes(l.id)));
     toast({ title: `${duplicateIds.length} duplicatas removidas` });
+  };
+
+  const addTagToSelected = async (tag: string) => {
+    if (!tag.trim() || selected.size === 0) return;
+    const ids = Array.from(selected);
+    for (let i = 0; i < ids.length; i += 100) {
+      const batch = ids.slice(i, i + 100);
+      const batchLeads = leads.filter(l => batch.includes(l.id));
+      for (const lead of batchLeads) {
+        const currentTags = lead.tags || [];
+        if (!currentTags.includes(tag.trim())) {
+          await supabase.from("leads").update({ tags: [...currentTags, tag.trim()] }).eq("id", lead.id);
+        }
+      }
+    }
+    setLeads(prev => prev.map(l => {
+      if (selected.has(l.id)) {
+        const currentTags = l.tags || [];
+        return currentTags.includes(tag.trim()) ? l : { ...l, tags: [...currentTags, tag.trim()] };
+      }
+      return l;
+    }));
+    setBulkTagInput("");
+    setShowTagPopover(false);
+    toast({ title: `Tag "${tag.trim()}" adicionada a ${ids.length} leads` });
   };
 
   const enrichLeads = useCallback(async () => {
@@ -617,6 +646,28 @@ const Leads = () => {
                   <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => kommoStatuses[id]?.status === "success").length})
                 </Button>
               )}
+              <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="border-accent/50 text-accent hover:bg-accent/10">
+                    <Tag className="h-4 w-4 mr-1" /> Adicionar tag ({selected.size})
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="start">
+                  <p className="text-xs text-muted-foreground mb-2">Adicionar tag aos {selected.size} leads selecionados</p>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nome da tag..."
+                      value={bulkTagInput}
+                      onChange={(e) => setBulkTagInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addTagToSelected(bulkTagInput)}
+                      className="h-8 text-sm bg-secondary/50"
+                    />
+                    <Button size="sm" className="h-8" onClick={() => addTagToSelected(bulkTagInput)} disabled={!bulkTagInput.trim()}>
+                      Aplicar
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </>
           )}
           <Button

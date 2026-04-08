@@ -131,6 +131,8 @@ const Leads = () => {
   const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
   const [bulkScoring, setBulkScoring] = useState(false);
   const [bulkScoreProgress, setBulkScoreProgress] = useState({ current: 0, total: 0 });
+  const [bulkTagInput, setBulkTagInput] = useState("");
+  const [showTagPopover, setShowTagPopover] = useState(false);
   const { toast } = useToast();
 
   // Kommo export state

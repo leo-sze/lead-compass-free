@@ -165,7 +165,7 @@ export default function FindContacts() {
 
         if (error) throw error;
 
-        const results = data.results as { index: number; phone: string | null; source: "site" | "places" | null }[];
+        const results = data.results as { index: number; phone: string | null; source: "site" | "places" | "existing" | null }[];
 
         setContacts(prev => {
           const next = [...prev];

@@ -308,8 +308,8 @@ Escolha EXATAMENTE UMA tag que melhor descreve o tipo de negócio:
     if (!aiRes.ok) {
       const errText = await aiRes.text();
       console.error("AI error:", aiRes.status, errText);
-      if (aiRes.status === 429) return jsonResp({ error: "Rate limit excedido. Tente novamente em alguns segundos." }, 429);
-      if (aiRes.status === 402) return jsonResp({ error: "Créditos insuficientes. Adicione créditos em Settings > Workspace > Usage." }, 402);
+      if (aiRes.status === 429) return jsonResp({ error: "Rate limit excedido. Tente novamente em alguns segundos." });
+      if (aiRes.status === 402) return jsonResp({ error: "Créditos insuficientes. Adicione créditos em Settings > Workspace > Usage." });
       throw new Error(`AI gateway error [${aiRes.status}]`);
     }
 

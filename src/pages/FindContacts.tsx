@@ -158,28 +158,39 @@ export default function FindContacts() {
               website: c.website,
               city: c.city,
               state: c.state,
+              existingPhone: c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || undefined,
             })),
           },
         });
 
         if (error) throw error;
 
-        const results = data.results as { index: number; phone: string | null; source: "site" | "places" | null }[];
+        const results = data.results as { index: number; phone: string | null; source: "site" | "places" | "existing" | null }[];
 
         setContacts(prev => {
           const next = [...prev];
           results.forEach(r => {
             if (r.phone && r.source) {
-              const status = r.source === "site" ? "found_site" : "found_places";
-              next[r.index] = {
-                ...next[r.index],
-                status,
-                foundPhone: r.phone,
-                corporatePhone: r.phone,
-                _raw: { ...next[r.index]._raw, "Corporate Phone": r.phone },
-              };
-              if (r.source === "site") foundSite++;
-              else foundPlaces++;
+              if (r.source === "existing") {
+                next[r.index] = {
+                  ...next[r.index],
+                  status: "has_phone",
+                  foundPhone: r.phone,
+                  corporatePhone: r.phone,
+                  _raw: { ...next[r.index]._raw, "Corporate Phone": r.phone },
+                };
+              } else {
+                const status = r.source === "site" ? "found_site" : "found_places";
+                next[r.index] = {
+                  ...next[r.index],
+                  status,
+                  foundPhone: r.phone,
+                  corporatePhone: r.phone,
+                  _raw: { ...next[r.index]._raw, "Corporate Phone": r.phone },
+                };
+                if (r.source === "site") foundSite++;
+                else foundPlaces++;
+              }
             } else {
               next[r.index] = { ...next[r.index], status: "not_found" };
               notFound++;

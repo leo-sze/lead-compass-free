@@ -11,15 +11,122 @@ interface ContactInput {
   website?: string;
   city?: string;
   state?: string;
+  existingPhone?: string;
 }
 
 interface ContactResult {
   index: number;
   phone: string | null;
-  source: "site" | "places" | null;
+  source: "site" | "places" | "existing" | null;
 }
 
-const PHONE_REGEX = /(\+?55[\s\-]?)?(\(?\d{2}\)?)[\s\-]?(9?\d{4})[\s\-]?(\d{4})/g;
+/** Normalize any phone string to +55DDDNUMBER format */
+function normalizePhone(raw: string): string {
+  // Strip everything except digits and leading +
+  let digits = raw.replace(/[^\d]/g, "");
+
+  // Remove country code 55 if present
+  if (digits.startsWith("55") && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+
+  // Must be 10 (fixo) or 11 (celular) digits: DDD + number
+  if (digits.length < 10 || digits.length > 11) return "";
+
+  return `+55${digits}`;
+}
+
+/** Validate Brazilian phone: DDD 11-99, correct digit count */
+function isValidBrazilianPhone(digits: string): boolean {
+  // digits should be just the national number without country code
+  const clean = digits.replace(/[^\d]/g, "");
+  
+  // Remove country code if present
+  let national = clean;
+  if (national.startsWith("55") && national.length >= 12) {
+    national = national.slice(2);
+  }
+
+  if (national.length < 10 || national.length > 11) return false;
+  
+  const ddd = parseInt(national.slice(0, 2));
+  if (ddd < 11 || ddd > 99) return false;
+
+  // If 11 digits, must start with 9 after DDD (mobile)
+  if (national.length === 11 && national[2] !== "9") return false;
+
+  return true;
+}
+
+/** Extract phones from tel: links and contact-related contexts */
+function scrapePhoneFromHTML(html: string): string[] {
+  const phones: string[] = [];
+
+  // Remove <script> and <style> blocks
+  const cleaned = html.replace(/<script[\s\S]*?<\/script>/gi, "")
+                       .replace(/<style[\s\S]*?<\/style>/gi, "");
+
+  // 1. Extract from tel: links (highest confidence)
+  const telMatches = cleaned.matchAll(/href=["']tel:([^"']+)["']/gi);
+  for (const m of telMatches) {
+    const digits = m[1].replace(/[^\d+]/g, "");
+    if (digits.length >= 8) phones.push(digits);
+  }
+
+  // 2. Extract from WhatsApp links
+  const waMatches = cleaned.matchAll(/(?:wa\.me|whatsapp\.com\/send\?phone=|api\.whatsapp\.com\/send\?phone=)(\d+)/gi);
+  for (const m of waMatches) {
+    phones.push(m[1]);
+  }
+
+  // 3. Extract from data-phone or data-tel attributes
+  const dataMatches = cleaned.matchAll(/data-(?:phone|tel|telefone)=["']([^"']+)["']/gi);
+  for (const m of dataMatches) {
+    const digits = m[1].replace(/[^\d+]/g, "");
+    if (digits.length >= 8) phones.push(digits);
+  }
+
+  // 4. Search near contact keywords (telefone, contato, fone, whatsapp, ligue)
+  const PHONE_REGEX = /(\+?55[\s\-.]?)?\(?\d{2}\)?[\s\-.]?9?\d{4}[\s\-.]?\d{4}/g;
+  const KEYWORDS = /(?:telefone|tel(?:efone)?|fone|whatsapp|contato|ligue|ligar|atendimento|sac)[:\s]*(.{0,60})/gi;
+  
+  let kwMatch;
+  while ((kwMatch = KEYWORDS.exec(cleaned)) !== null) {
+    const context = kwMatch[0] + (cleaned.slice(kwMatch.index, kwMatch.index + 120) || "");
+    // Remove HTML tags from context
+    const textContext = context.replace(/<[^>]+>/g, " ");
+    let phoneMatch;
+    while ((phoneMatch = PHONE_REGEX.exec(textContext)) !== null) {
+      phones.push(phoneMatch[0]);
+    }
+  }
+
+  // 5. Search in footer sections
+  const footerMatch = cleaned.match(/<footer[\s\S]*?<\/footer>/gi);
+  if (footerMatch) {
+    for (const footer of footerMatch) {
+      const footerText = footer.replace(/<[^>]+>/g, " ");
+      let phoneMatch;
+      const footerPhoneRegex = /(\+?55[\s\-.]?)?\(?\d{2}\)?[\s\-.]?9?\d{4}[\s\-.]?\d{4}/g;
+      while ((phoneMatch = footerPhoneRegex.exec(footerText)) !== null) {
+        phones.push(phoneMatch[0]);
+      }
+    }
+  }
+
+  // Validate and deduplicate
+  const validated: string[] = [];
+  const seen = new Set<string>();
+  for (const p of phones) {
+    const normalized = normalizePhone(p);
+    if (normalized && isValidBrazilianPhone(normalized) && !seen.has(normalized)) {
+      seen.add(normalized);
+      validated.push(normalized);
+    }
+  }
+
+  return validated;
+}
 
 async function scrapePhoneFromSite(url: string): Promise<string | null> {
   try {
@@ -29,15 +136,13 @@ async function scrapePhoneFromSite(url: string): Promise<string | null> {
     const res = await fetch(formatted, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadExtract/1.0)" },
       redirect: "follow",
+      signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) return null;
 
     const html = await res.text();
-    const matches = html.match(PHONE_REGEX);
-    if (matches && matches.length > 0) {
-      // Return the first match, cleaned up
-      return matches[0].replace(/[\s\-]/g, "").replace(/^\+?55/, "+55 ");
-    }
+    const phones = scrapePhoneFromHTML(html);
+    return phones.length > 0 ? phones[0] : null;
   } catch (e) {
     console.error(`Scrape error for ${url}:`, e);
   }
@@ -54,7 +159,7 @@ async function findPhoneViaPlaces(companyName: string, city: string, state: stri
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "places.displayName,places.nationalPhoneNumber",
+        "X-Goog-FieldMask": "places.displayName,places.nationalPhoneNumber,places.internationalPhoneNumber",
       },
       body: JSON.stringify({ textQuery: query }),
     });
@@ -66,8 +171,10 @@ async function findPhoneViaPlaces(companyName: string, city: string, state: stri
 
     const data = await res.json();
     const place = data.places?.[0];
-    if (place?.nationalPhoneNumber) {
-      return place.nationalPhoneNumber;
+    const raw = place?.internationalPhoneNumber || place?.nationalPhoneNumber;
+    if (raw) {
+      const normalized = normalizePhone(raw);
+      if (normalized && isValidBrazilianPhone(normalized)) return normalized;
     }
   } catch (e) {
     console.error(`Places error for "${query}":`, e);
@@ -90,7 +197,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Get Google Places API key from settings (optional - only needed for stage 2)
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -108,15 +214,18 @@ Deno.serve(async (req) => {
     for (let i = 0; i < contacts.length; i++) {
       const contact = contacts[i];
       let phone: string | null = null;
-      let source: "site" | "places" | null = null;
+      let source: ContactResult["source"] = null;
 
-      // Stage 1: Scrape website
-      if (contact.website) {
-        phone = await scrapePhoneFromSite(contact.website);
-        if (phone) source = "site";
+      // Stage 0: If existing phone provided, normalize and return
+      if (contact.existingPhone) {
+        const normalized = normalizePhone(contact.existingPhone);
+        if (normalized && isValidBrazilianPhone(normalized)) {
+          phone = normalized;
+          source = "existing";
+        }
       }
 
-      // Stage 2: Google Places fallback
+      // Stage 1: Google Places (verified numbers) — PRIMARY
       if (!phone && placesApiKey) {
         phone = await findPhoneViaPlaces(
           contact.companyName,
@@ -127,9 +236,14 @@ Deno.serve(async (req) => {
         if (phone) source = "places";
       }
 
+      // Stage 2: Scrape website — FALLBACK
+      if (!phone && contact.website) {
+        phone = await scrapePhoneFromSite(contact.website);
+        if (phone) source = "site";
+      }
+
       results.push({ index: contact.index, phone, source });
 
-      // 200ms delay between requests
       if (i < contacts.length - 1) {
         await new Promise(r => setTimeout(r, 200));
       }

@@ -36,7 +36,7 @@ type Lead = Tables<"leads"> & {
   sinais_negativos?: string[] | null;
 };
 
-type QualityFilter = "all" | "quente" | "morno" | "frio" | "desqualificado";
+type QualityFilter = "all" | "quente" | "morno" | "frio" | "desqualificado" | "sem_avaliacao";
 
 const qualityConfig: Record<string, { label: string; className: string }> = {
   quente: { label: "Quente", className: "bg-green-500/10 text-green-400 border-green-500/30" },
@@ -192,7 +192,9 @@ const Leads = () => {
 
   const filtered = useMemo(() => {
     let result = leads;
-    if (qualityFilter !== "all") {
+    if (qualityFilter === "sem_avaliacao") {
+      result = result.filter((l) => !l.lead_quality && l.score == null);
+    } else if (qualityFilter !== "all") {
       if (qualityFilter === "desqualificado") {
         result = result.filter((l) => l.lead_quality === "desqualificado");
       } else {
@@ -747,9 +749,11 @@ const Leads = () => {
           { value: "frio" as QualityFilter, label: "🔵 Frio", cls: "bg-red-500/10 text-red-400 border-red-500/30" },
           { value: "all" as QualityFilter, label: "Todos", cls: "bg-secondary text-foreground border-border" },
           { value: "desqualificado" as QualityFilter, label: "Desqualificados", cls: "bg-muted/50 text-muted-foreground border-border" },
+          { value: "sem_avaliacao" as QualityFilter, label: "⬜ Sem avaliação", cls: "bg-secondary/50 text-muted-foreground border-border" },
         ]).map((tab) => {
           const count = leads.filter((l) => {
             if (tab.value === "all") return l.lead_quality !== "desqualificado";
+            if (tab.value === "sem_avaliacao") return !l.lead_quality && l.score == null;
             return l.lead_quality === tab.value;
           }).length;
           return (

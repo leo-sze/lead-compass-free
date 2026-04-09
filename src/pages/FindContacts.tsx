@@ -158,6 +158,7 @@ export default function FindContacts() {
               website: c.website,
               city: c.city,
               state: c.state,
+              existingPhone: c.workDirectPhone || c.mobilePhone || c.corporatePhone || c.otherPhone || undefined,
             })),
           },
         });

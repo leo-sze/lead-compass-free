@@ -171,16 +171,26 @@ export default function FindContacts() {
           const next = [...prev];
           results.forEach(r => {
             if (r.phone && r.source) {
-              const status = r.source === "site" ? "found_site" : "found_places";
-              next[r.index] = {
-                ...next[r.index],
-                status,
-                foundPhone: r.phone,
-                corporatePhone: r.phone,
-                _raw: { ...next[r.index]._raw, "Corporate Phone": r.phone },
-              };
-              if (r.source === "site") foundSite++;
-              else foundPlaces++;
+              if (r.source === "existing") {
+                next[r.index] = {
+                  ...next[r.index],
+                  status: "has_phone",
+                  foundPhone: r.phone,
+                  corporatePhone: r.phone,
+                  _raw: { ...next[r.index]._raw, "Corporate Phone": r.phone },
+                };
+              } else {
+                const status = r.source === "site" ? "found_site" : "found_places";
+                next[r.index] = {
+                  ...next[r.index],
+                  status,
+                  foundPhone: r.phone,
+                  corporatePhone: r.phone,
+                  _raw: { ...next[r.index]._raw, "Corporate Phone": r.phone },
+                };
+                if (r.source === "site") foundSite++;
+                else foundPlaces++;
+              }
             } else {
               next[r.index] = { ...next[r.index], status: "not_found" };
               notFound++;

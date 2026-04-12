@@ -636,6 +636,13 @@ Deno.serve(async (req) => {
 
       console.log(`Total raw results: ${allRawResults.length}`);
 
+      if (allRawResults.length === 0) {
+        return new Response(
+          JSON.stringify({ leads: [], total: 0, error: "Nenhum resultado encontrado. Sua cota de buscas pode ter sido atingida. Verifique seu plano do SearchApi/SerpApi.", fallback: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Parse raw results into structured leads
       let leads = parseLinkedInResultsRaw(allRawResults);
       console.log(`Parsed leads: ${leads.length}`);

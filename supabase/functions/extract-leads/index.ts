@@ -637,8 +637,11 @@ Deno.serve(async (req) => {
         leads = await enrichLinkedInLeadsBatch(leads, lovableKey);
       }
 
-      // Filter out leads without empresa
-      leads = leads.filter(l => l.nome_empresa && l.nome_empresa.length >= 2);
+      // Keep leads even without empresa - use nome_decisor as fallback
+      leads = leads.map(l => ({
+        ...l,
+        nome_empresa: l.nome_empresa && l.nome_empresa.length >= 2 ? l.nome_empresa : (l.nome_decisor || "Desconhecido"),
+      }));
 
       // Enrich with company data (site, phone) via Firecrawl
       if (firecrawlKey && lovableKey) {

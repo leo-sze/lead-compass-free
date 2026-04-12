@@ -2,11 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search, MapPin, Briefcase, Loader2, Linkedin, Tag, Factory, Download,
   Trash2, ExternalLink, Phone, Globe, Building2, Users, ChevronDown, ChevronUp,
-  Plus, X,
+  Plus, X, RotateCcw, Filter, Hash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,15 @@ const SUGGESTED_TITLES = [
   "VP", "Head", "Coordenador",
 ];
 
+const EMPLOYEE_COUNT_OPTIONS = [
+  { label: "1-10", value: "1-10" },
+  { label: "11-50", value: "11-50" },
+  { label: "51-200", value: "51-200" },
+  { label: "201-500", value: "201-500" },
+  { label: "501-1000", value: "501-1000" },
+  { label: "1000+", value: "1000+" },
+];
+
 const LinkedInSearch = () => {
   // Search form state
   const [jobTitles, setJobTitles] = useState<string[]>([]);
@@ -38,6 +48,8 @@ const LinkedInSearch = () => {
   const [industry, setIndustry] = useState("");
   const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("");
+  const [employeeCount, setEmployeeCount] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
@@ -47,6 +59,11 @@ const LinkedInSearch = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchFilter, setSearchFilter] = useState("");
+
+  // Table filters
+  const [filterHasPhone, setFilterHasPhone] = useState(false);
+  const [filterHasSite, setFilterHasSite] = useState(false);
+  const [filterCity, setFilterCity] = useState("");
 
   const { toast } = useToast();
 
@@ -66,15 +83,26 @@ const LinkedInSearch = () => {
 
   // Filtered results
   const filteredLeads = useMemo(() => {
-    if (!searchFilter.trim()) return leads;
-    const q = searchFilter.toLowerCase();
-    return leads.filter(l =>
-      (l.nome_decisor?.toLowerCase().includes(q)) ||
-      (l.nome_empresa?.toLowerCase().includes(q)) ||
-      (l.cidade?.toLowerCase().includes(q)) ||
-      (l.termo_pesquisa?.toLowerCase().includes(q))
-    );
-  }, [leads, searchFilter]);
+    let result = leads;
+    if (searchFilter.trim()) {
+      const q = searchFilter.toLowerCase();
+      result = result.filter(l =>
+        (l.nome_decisor?.toLowerCase().includes(q)) ||
+        (l.nome_empresa?.toLowerCase().includes(q)) ||
+        (l.cidade?.toLowerCase().includes(q)) ||
+        (l.termo_pesquisa?.toLowerCase().includes(q))
+      );
+    }
+    if (filterHasPhone) result = result.filter(l => l.telefone);
+    if (filterHasSite) result = result.filter(l => l.site);
+    if (filterCity.trim()) {
+      const c = filterCity.toLowerCase();
+      result = result.filter(l => l.cidade?.toLowerCase().includes(c));
+    }
+    return result;
+  }, [leads, searchFilter, filterHasPhone, filterHasSite, filterCity]);
+
+  const hasActiveTableFilters = filterHasPhone || filterHasSite || filterCity.trim() !== "" || searchFilter.trim() !== "";
 
   // Add job title
   const addTitle = (title: string) => {
@@ -89,7 +117,28 @@ const LinkedInSearch = () => {
     setJobTitles(prev => prev.filter(t => t !== title));
   };
 
-  // Selection
+  // Clear all search fields
+  const clearSearch = () => {
+    setJobTitles([]);
+    setTitleInput("");
+    setIndustry("");
+    setKeywords("");
+    setLocation("");
+    setEmployeeCount("");
+    setCompanyName("");
+  };
+
+  // Clear table filters
+  const clearTableFilters = () => {
+    setSearchFilter("");
+    setFilterHasPhone(false);
+    setFilterHasSite(false);
+    setFilterCity("");
+  };
+
+  const hasSearchValues = jobTitles.length > 0 || industry || keywords || location || employeeCount || companyName;
+
+
   const toggleSelect = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -131,12 +180,18 @@ const LinkedInSearch = () => {
       setProgress(10);
       setStatusText(`Buscando ${jobTitles.length} cargo(s) no LinkedIn...`);
 
+      const keywordsParts = [
+        keywords.trim(),
+        companyName.trim() ? `"${companyName.trim()}"` : "",
+        employeeCount && employeeCount !== "any" ? `"${employeeCount} employees"` : "",
+      ].filter(Boolean).join(" ");
+
       const { data, error } = await supabase.functions.invoke("extract-leads", {
         body: {
           query: jobTitles.join(", "),
           location: location.trim(),
           setor: industry.trim() || undefined,
-          keywords: keywords.trim() || undefined,
+          keywords: keywordsParts || undefined,
           apiKey: apiKeyData.value,
           provider: providerData?.value || "serpapi",
           source: "linkedin",
@@ -297,7 +352,7 @@ const LinkedInSearch = () => {
             </div>
 
             {/* Other filters in grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5" /> Localização *
@@ -324,10 +379,38 @@ const LinkedInSearch = () => {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5" /> Empresa
+                </label>
+                <Input
+                  placeholder="Nome da empresa..."
+                  value={companyName}
+                  onChange={e => setCompanyName(e.target.value)}
+                  className="h-9 text-sm bg-secondary/50 border-border/50"
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Hash className="h-3.5 w-3.5" /> Nº Funcionários
+                </label>
+                <Select value={employeeCount} onValueChange={setEmployeeCount} disabled={loading}>
+                  <SelectTrigger className="h-9 text-sm bg-secondary/50 border-border/50">
+                    <SelectValue placeholder="Qualquer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Qualquer</SelectItem>
+                    {EMPLOYEE_COUNT_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <Tag className="h-3.5 w-3.5" /> Keywords
                 </label>
                 <Input
-                  placeholder="Palavras-chave adicionais..."
+                  placeholder="Palavras-chave..."
                   value={keywords}
                   onChange={e => setKeywords(e.target.value)}
                   className="h-9 text-sm bg-secondary/50 border-border/50"
@@ -347,7 +430,7 @@ const LinkedInSearch = () => {
               </div>
             )}
 
-            {/* Search button */}
+            {/* Search + Clear buttons */}
             <div className="flex items-center gap-3">
               <Button
                 onClick={handleSearch}
@@ -360,6 +443,17 @@ const LinkedInSearch = () => {
                   <><Linkedin className="mr-1.5 h-4 w-4" />Buscar Decisores</>
                 )}
               </Button>
+              {hasSearchValues && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSearch}
+                  disabled={loading}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Limpar Pesquisa
+                </Button>
+              )}
               {jobTitles.length > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {jobTitles.length} cargo(s) selecionado(s)
@@ -379,6 +473,7 @@ const LinkedInSearch = () => {
           </h2>
           <p className="text-sm text-muted-foreground">
             {filteredLeads.length} de {leads.length} leads
+            {hasActiveTableFilters && " (filtrado)"}
           </p>
         </div>
         <div className="flex gap-2 items-center">
@@ -400,6 +495,35 @@ const LinkedInSearch = () => {
             <Download className="h-3.5 w-3.5 mr-1" /> CSV
           </Button>
         </div>
+      </div>
+
+      {/* ─── Table Filters Bar ────────────────────────────── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <Filter className="h-3.5 w-3.5" /> Filtros:
+        </span>
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <Checkbox checked={filterHasPhone} onCheckedChange={(v) => setFilterHasPhone(!!v)} className="h-3.5 w-3.5" />
+          <Phone className="h-3 w-3 text-muted-foreground" /> Com telefone
+        </label>
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <Checkbox checked={filterHasSite} onCheckedChange={(v) => setFilterHasSite(!!v)} className="h-3.5 w-3.5" />
+          <Globe className="h-3 w-3 text-muted-foreground" /> Com site
+        </label>
+        <div className="relative">
+          <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Input
+            placeholder="Filtrar cidade..."
+            value={filterCity}
+            onChange={e => setFilterCity(e.target.value)}
+            className="pl-7 h-7 w-36 text-xs bg-secondary/50 border-border/50"
+          />
+        </div>
+        {hasActiveTableFilters && (
+          <Button variant="ghost" size="sm" onClick={clearTableFilters} className="h-7 text-xs text-muted-foreground hover:text-foreground">
+            <X className="h-3 w-3 mr-1" /> Limpar filtros
+          </Button>
+        )}
       </div>
 
       {/* ─── Results Table ────────────────────────────────── */}

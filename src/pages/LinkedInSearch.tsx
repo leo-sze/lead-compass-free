@@ -200,6 +200,19 @@ const LinkedInSearch = () => {
 
       if (error) throw error;
 
+      // Handle quota/rate limit errors gracefully
+      if (data?.fallback || data?.error) {
+        toast({
+          title: "Cota de buscas atingida",
+          description: data.error || "Sua cota mensal de buscas foi atingida. Atualize seu plano do SearchApi/SerpApi.",
+          variant: "destructive",
+        });
+        setLoading(false);
+        setProgress(0);
+        setStatusText("");
+        return;
+      }
+
       setProgress(70);
       setStatusText("Salvando leads...");
 

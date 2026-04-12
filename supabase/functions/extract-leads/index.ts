@@ -242,6 +242,7 @@ async function fetchSearchApi(query: string, apiKey: string, page: number, engin
     console.error("SearchApi fetch error:", e);
     return [];
   }
+}
 
 // ─── Google Maps Helpers ────────────────────────────────────────
 

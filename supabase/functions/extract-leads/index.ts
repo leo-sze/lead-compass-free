@@ -135,17 +135,23 @@ function parseLinkedInTitle(title: string): { nome: string | null; empresa: stri
   let empresa: string | null = null;
 
   if (parts.length >= 3) {
-    cargo = parts[1]?.trim() || null;
-    empresa = parts.slice(2).join(" - ").trim() || null;
+    // "Name - Title - Company" or "Name - Title at Company - Extra"
+    const secondPart = parts[1].trim();
+    const atMatch = secondPart.match(/^(.+?)\s+(?:at|em|na|no|@)\s+(.+)$/i);
+    if (atMatch) {
+      cargo = atMatch[1].trim();
+      empresa = atMatch[2].trim() + (parts.length > 2 ? " - " + parts.slice(2).join(" - ").trim() : "");
+    } else {
+      cargo = secondPart || null;
+      empresa = parts.slice(2).join(" - ").trim() || null;
+    }
   } else if (parts.length === 2) {
-    // Could be "Name - Cargo at Empresa" or "Name - Empresa"
     const secondPart = parts[1].trim();
     const atMatch = secondPart.match(/^(.+?)\s+(?:at|em|na|no|@)\s+(.+)$/i);
     if (atMatch) {
       cargo = atMatch[1].trim();
       empresa = atMatch[2].trim();
     } else {
-      // Assume it's cargo or empresa
       cargo = secondPart;
     }
   }
@@ -631,8 +637,11 @@ Deno.serve(async (req) => {
         leads = await enrichLinkedInLeadsBatch(leads, lovableKey);
       }
 
-      // Filter out leads without empresa
-      leads = leads.filter(l => l.nome_empresa && l.nome_empresa.length >= 2);
+      // Keep leads even without empresa - use nome_decisor as fallback
+      leads = leads.map(l => ({
+        ...l,
+        nome_empresa: l.nome_empresa && l.nome_empresa.length >= 2 ? l.nome_empresa : (l.nome_decisor || "Desconhecido"),
+      }));
 
       // Enrich with company data (site, phone) via Firecrawl
       if (firecrawlKey && lovableKey) {

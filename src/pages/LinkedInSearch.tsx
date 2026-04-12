@@ -346,7 +346,7 @@ const LinkedInSearch = () => {
             </div>
 
             {/* Other filters in grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <MapPin className="h-3.5 w-3.5" /> Localização *
@@ -373,10 +373,38 @@ const LinkedInSearch = () => {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5" /> Empresa
+                </label>
+                <Input
+                  placeholder="Nome da empresa..."
+                  value={companyName}
+                  onChange={e => setCompanyName(e.target.value)}
+                  className="h-9 text-sm bg-secondary/50 border-border/50"
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Hash className="h-3.5 w-3.5" /> Nº Funcionários
+                </label>
+                <Select value={employeeCount} onValueChange={setEmployeeCount} disabled={loading}>
+                  <SelectTrigger className="h-9 text-sm bg-secondary/50 border-border/50">
+                    <SelectValue placeholder="Qualquer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Qualquer</SelectItem>
+                    {EMPLOYEE_COUNT_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                   <Tag className="h-3.5 w-3.5" /> Keywords
                 </label>
                 <Input
-                  placeholder="Palavras-chave adicionais..."
+                  placeholder="Palavras-chave..."
                   value={keywords}
                   onChange={e => setKeywords(e.target.value)}
                   className="h-9 text-sm bg-secondary/50 border-border/50"
@@ -396,7 +424,7 @@ const LinkedInSearch = () => {
               </div>
             )}
 
-            {/* Search button */}
+            {/* Search + Clear buttons */}
             <div className="flex items-center gap-3">
               <Button
                 onClick={handleSearch}
@@ -409,6 +437,17 @@ const LinkedInSearch = () => {
                   <><Linkedin className="mr-1.5 h-4 w-4" />Buscar Decisores</>
                 )}
               </Button>
+              {hasSearchValues && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSearch}
+                  disabled={loading}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Limpar Pesquisa
+                </Button>
+              )}
               {jobTitles.length > 0 && (
                 <span className="text-xs text-muted-foreground">
                   {jobTitles.length} cargo(s) selecionado(s)

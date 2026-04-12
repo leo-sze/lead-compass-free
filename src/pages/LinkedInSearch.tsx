@@ -32,6 +32,15 @@ const SUGGESTED_TITLES = [
   "VP", "Head", "Coordenador",
 ];
 
+const EMPLOYEE_COUNT_OPTIONS = [
+  { label: "1-10", value: "1-10" },
+  { label: "11-50", value: "11-50" },
+  { label: "51-200", value: "51-200" },
+  { label: "201-500", value: "201-500" },
+  { label: "501-1000", value: "501-1000" },
+  { label: "1000+", value: "1000+" },
+];
+
 const LinkedInSearch = () => {
   // Search form state
   const [jobTitles, setJobTitles] = useState<string[]>([]);
@@ -39,6 +48,8 @@ const LinkedInSearch = () => {
   const [industry, setIndustry] = useState("");
   const [keywords, setKeywords] = useState("");
   const [location, setLocation] = useState("");
+  const [employeeCount, setEmployeeCount] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
@@ -48,6 +59,11 @@ const LinkedInSearch = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchFilter, setSearchFilter] = useState("");
+
+  // Table filters
+  const [filterHasPhone, setFilterHasPhone] = useState(false);
+  const [filterHasSite, setFilterHasSite] = useState(false);
+  const [filterCity, setFilterCity] = useState("");
 
   const { toast } = useToast();
 

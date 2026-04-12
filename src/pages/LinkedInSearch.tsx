@@ -467,6 +467,7 @@ const LinkedInSearch = () => {
           </h2>
           <p className="text-sm text-muted-foreground">
             {filteredLeads.length} de {leads.length} leads
+            {hasActiveTableFilters && " (filtrado)"}
           </p>
         </div>
         <div className="flex gap-2 items-center">
@@ -488,6 +489,35 @@ const LinkedInSearch = () => {
             <Download className="h-3.5 w-3.5 mr-1" /> CSV
           </Button>
         </div>
+      </div>
+
+      {/* ─── Table Filters Bar ────────────────────────────── */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="text-xs text-muted-foreground flex items-center gap-1">
+          <Filter className="h-3.5 w-3.5" /> Filtros:
+        </span>
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <Checkbox checked={filterHasPhone} onCheckedChange={(v) => setFilterHasPhone(!!v)} className="h-3.5 w-3.5" />
+          <Phone className="h-3 w-3 text-muted-foreground" /> Com telefone
+        </label>
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <Checkbox checked={filterHasSite} onCheckedChange={(v) => setFilterHasSite(!!v)} className="h-3.5 w-3.5" />
+          <Globe className="h-3 w-3 text-muted-foreground" /> Com site
+        </label>
+        <div className="relative">
+          <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+          <Input
+            placeholder="Filtrar cidade..."
+            value={filterCity}
+            onChange={e => setFilterCity(e.target.value)}
+            className="pl-7 h-7 w-36 text-xs bg-secondary/50 border-border/50"
+          />
+        </div>
+        {hasActiveTableFilters && (
+          <Button variant="ghost" size="sm" onClick={clearTableFilters} className="h-7 text-xs text-muted-foreground hover:text-foreground">
+            <X className="h-3 w-3 mr-1" /> Limpar filtros
+          </Button>
+        )}
       </div>
 
       {/* ─── Results Table ────────────────────────────────── */}

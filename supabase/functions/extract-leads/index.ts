@@ -435,8 +435,15 @@ Deno.serve(async (req) => {
         return true;
       });
 
+      // Enrich LinkedIn leads with site/phone/cidade via Firecrawl + AI
+      const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY") || "";
+      let enrichedLeads = uniqueLeads;
+      if (firecrawlKey && lovableKey) {
+        enrichedLeads = await enrichLinkedInLeads(uniqueLeads, firecrawlKey, lovableKey);
+      }
+
       return new Response(
-        JSON.stringify({ leads: uniqueLeads, total: uniqueLeads.length }),
+        JSON.stringify({ leads: enrichedLeads, total: enrichedLeads.length }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {

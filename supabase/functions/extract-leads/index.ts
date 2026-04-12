@@ -376,6 +376,88 @@ function parseGoogleMapsResult(r: any) {
   };
 }
 
+async function enrichLinkedInLeads(leads: any[], firecrawlKey: string, lovableKey: string): Promise<any[]> {
+  const BATCH_SIZE = 5;
+  const results = [...leads];
+
+  for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+    const batch = leads.slice(i, i + BATCH_SIZE);
+    const searches = await Promise.all(
+      batch.map((lead) =>
+        searchFirecrawl(
+          `"${lead.nome_empresa}" telefone site contato`,
+          firecrawlKey,
+          2
+        )
+      )
+    );
+
+    const extractionPromises = batch.map(async (lead, idx) => {
+      const content = searches[idx];
+      if (!content.trim()) return { site: null, telefone: null, cidade: null };
+
+      try {
+        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-lite",
+            messages: [
+              { role: "system", content: "Extraia o site oficial, telefone principal e cidade da empresa. Retorne null se não encontrar. NUNCA invente dados." },
+              { role: "user", content: `Empresa: "${lead.nome_empresa}"\n\nConteúdo:\n${content.slice(0, 3000)}` },
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "extract_company_info",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    site: { type: "string", description: "URL do site oficial da empresa" },
+                    telefone: { type: "string", description: "Telefone principal" },
+                    cidade: { type: "string", description: "Cidade da empresa" },
+                  },
+                  required: ["site", "telefone", "cidade"],
+                },
+              },
+            }],
+            tool_choice: { type: "function", function: { name: "extract_company_info" } },
+          }),
+        });
+
+        if (aiRes.ok) {
+          const aiData = await aiRes.json();
+          const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+          if (toolCall) {
+            const args = JSON.parse(toolCall.function.arguments);
+            return {
+              site: args.site && args.site !== "null" ? args.site.trim() : null,
+              telefone: args.telefone && args.telefone !== "null" ? normalizePhone(args.telefone) : null,
+              cidade: args.cidade && args.cidade !== "null" ? args.cidade.trim() : null,
+            };
+          }
+        } else {
+          console.error("AI enrich error:", aiRes.status);
+        }
+      } catch (e) { console.error("AI enrich error:", e); }
+      return { site: null, telefone: null, cidade: null };
+    });
+
+    const extracted = await Promise.all(extractionPromises);
+    for (let j = 0; j < batch.length; j++) {
+      const idx = i + j;
+      results[idx] = {
+        ...results[idx],
+        site: extracted[j].site || null,
+        telefone: extracted[j].telefone || null,
+        cidade: extracted[j].cidade || null,
+      };
+    }
+  }
+
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -435,8 +517,15 @@ Deno.serve(async (req) => {
         return true;
       });
 
+      // Enrich LinkedIn leads with site/phone/cidade via Firecrawl + AI
+      const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY") || "";
+      let enrichedLeads = uniqueLeads;
+      if (firecrawlKey && lovableKey) {
+        enrichedLeads = await enrichLinkedInLeads(uniqueLeads, firecrawlKey, lovableKey);
+      }
+
       return new Response(
-        JSON.stringify({ leads: uniqueLeads, total: uniqueLeads.length }),
+        JSON.stringify({ leads: enrichedLeads, total: enrichedLeads.length }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     } else {

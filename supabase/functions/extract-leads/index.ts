@@ -199,12 +199,21 @@ async function fetchSerpApi(query: string, apiKey: string, start: number, engine
   url.searchParams.set("start", String(start));
 
   const res = await fetch(url.toString());
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`SerpApi error [${res.status}]: ${errBody}`);
+    if (!res.ok) {
+      const errBody = await res.text();
+      if (res.status === 429 || res.status === 402 || res.status === 401) {
+        console.error(`SerpApi rate/auth error [${res.status}]: ${errBody}`);
+        return [];
+      }
+      throw new Error(`SerpApi error [${res.status}]: ${errBody}`);
+    }
+    const data = await res.json();
+    return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
+  } catch (e: any) {
+    if (e.message?.includes("SerpApi error")) throw e;
+    console.error("SerpApi fetch error:", e);
+    return [];
   }
-  const data = await res.json();
-  return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
 }
 
 async function fetchSearchApi(query: string, apiKey: string, page: number, engine: string): Promise<any[]> {
@@ -215,14 +224,23 @@ async function fetchSearchApi(query: string, apiKey: string, page: number, engin
   url.searchParams.set("num", "100");
   url.searchParams.set("page", String(page));
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    const errBody = await res.text();
-    throw new Error(`SearchApi error [${res.status}]: ${errBody}`);
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      const errBody = await res.text();
+      if (res.status === 429 || res.status === 402 || res.status === 401) {
+        console.error(`SearchApi rate/auth error [${res.status}]: ${errBody}`);
+        return [];
+      }
+      throw new Error(`SearchApi error [${res.status}]: ${errBody}`);
+    }
+    const data = await res.json();
+    return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
+  } catch (e: any) {
+    if (e.message?.includes("SearchApi error")) throw e;
+    console.error("SearchApi fetch error:", e);
+    return [];
   }
-  const data = await res.json();
-  return engine === "google_maps" ? (data.local_results || []) : (data.organic_results || []);
-}
 
 // ─── Google Maps Helpers ────────────────────────────────────────
 

@@ -203,10 +203,44 @@ Regras:
           }
         }
       } else {
-        console.error("AI parse LinkedIn error:", aiRes.status, await aiRes.text());
+        const errText = await aiRes.text();
+        console.error("AI parse LinkedIn error:", aiRes.status, errText);
+        // Fallback: parse raw results without AI
+        for (const r of batch) {
+          const title = r.title || "";
+          const link = r.link || "";
+          if (!link.includes("linkedin.com/in")) continue;
+          // Try to extract name and company from title like "Name - Title - Company | LinkedIn"
+          const parts = title.replace(/\s*\|\s*LinkedIn$/i, "").split(" - ");
+          const nome = parts[0]?.trim() || null;
+          const empresa = parts.length >= 3 ? parts[parts.length - 1]?.trim() : (parts[1]?.trim() || null);
+          if (!nome || nome.length < 2) continue;
+          allParsed.push({
+            nome_empresa: empresa && empresa.length >= 2 ? empresa : `LinkedIn Lead`,
+            telefone: null, site: null, endereco: null, instagram: null,
+            linkedin: link,
+            nome_decisor: nome,
+          });
+        }
       }
     } catch (e) {
       console.error("AI LinkedIn batch error:", e);
+      // Fallback on exception too
+      for (const r of batch) {
+        const title = r.title || "";
+        const link = r.link || "";
+        if (!link.includes("linkedin.com/in")) continue;
+        const parts = title.replace(/\s*\|\s*LinkedIn$/i, "").split(" - ");
+        const nome = parts[0]?.trim() || null;
+        const empresa = parts.length >= 3 ? parts[parts.length - 1]?.trim() : (parts[1]?.trim() || null);
+        if (!nome || nome.length < 2) continue;
+        allParsed.push({
+          nome_empresa: empresa && empresa.length >= 2 ? empresa : `LinkedIn Lead`,
+          telefone: null, site: null, endereco: null, instagram: null,
+          linkedin: link,
+          nome_decisor: nome,
+        });
+      }
     }
   }
 

@@ -117,7 +117,28 @@ const LinkedInSearch = () => {
     setJobTitles(prev => prev.filter(t => t !== title));
   };
 
-  // Selection
+  // Clear all search fields
+  const clearSearch = () => {
+    setJobTitles([]);
+    setTitleInput("");
+    setIndustry("");
+    setKeywords("");
+    setLocation("");
+    setEmployeeCount("");
+    setCompanyName("");
+  };
+
+  // Clear table filters
+  const clearTableFilters = () => {
+    setSearchFilter("");
+    setFilterHasPhone(false);
+    setFilterHasSite(false);
+    setFilterCity("");
+  };
+
+  const hasSearchValues = jobTitles.length > 0 || industry || keywords || location || employeeCount || companyName;
+
+
   const toggleSelect = (id: string) => {
     setSelected(prev => {
       const next = new Set(prev);

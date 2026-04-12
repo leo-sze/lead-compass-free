@@ -180,12 +180,18 @@ const LinkedInSearch = () => {
       setProgress(10);
       setStatusText(`Buscando ${jobTitles.length} cargo(s) no LinkedIn...`);
 
+      const keywordsParts = [
+        keywords.trim(),
+        companyName.trim() ? `"${companyName.trim()}"` : "",
+        employeeCount && employeeCount !== "any" ? `"${employeeCount} employees"` : "",
+      ].filter(Boolean).join(" ");
+
       const { data, error } = await supabase.functions.invoke("extract-leads", {
         body: {
           query: jobTitles.join(", "),
           location: location.trim(),
           setor: industry.trim() || undefined,
-          keywords: keywords.trim() || undefined,
+          keywords: keywordsParts || undefined,
           apiKey: apiKeyData.value,
           provider: providerData?.value || "serpapi",
           source: "linkedin",

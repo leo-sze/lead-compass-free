@@ -359,8 +359,8 @@ Deno.serve(async (req) => {
     const { query, location, setor, keywords, apiKey, provider, source } = parsed.data;
 
     const allResults: any[] = [];
-    const targetCount = source === "linkedin" ? 20 : 60;
-    const maxPages = source === "linkedin" ? 2 : 4;
+    const targetCount = source === "linkedin" ? 300 : 60;
+    const maxPages = source === "linkedin" ? 30 : 4;
 
     if (source === "linkedin") {
       const industryPart = setor ? ` "${setor}"` : "";

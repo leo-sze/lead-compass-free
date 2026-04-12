@@ -198,7 +198,8 @@ async function fetchSerpApi(query: string, apiKey: string, start: number, engine
   url.searchParams.set("num", "100");
   url.searchParams.set("start", String(start));
 
-  const res = await fetch(url.toString());
+  try {
+    const res = await fetch(url.toString());
     if (!res.ok) {
       const errBody = await res.text();
       if (res.status === 429 || res.status === 402 || res.status === 401) {

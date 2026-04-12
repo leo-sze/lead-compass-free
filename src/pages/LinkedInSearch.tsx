@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Search, MapPin, Briefcase, Loader2, Linkedin, Tag, Factory, Download,
   Trash2, ExternalLink, Phone, Globe, Building2, Users, ChevronDown, ChevronUp,
-  Plus, X,
+  Plus, X, RotateCcw, Filter, Hash,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

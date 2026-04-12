@@ -83,15 +83,26 @@ const LinkedInSearch = () => {
 
   // Filtered results
   const filteredLeads = useMemo(() => {
-    if (!searchFilter.trim()) return leads;
-    const q = searchFilter.toLowerCase();
-    return leads.filter(l =>
-      (l.nome_decisor?.toLowerCase().includes(q)) ||
-      (l.nome_empresa?.toLowerCase().includes(q)) ||
-      (l.cidade?.toLowerCase().includes(q)) ||
-      (l.termo_pesquisa?.toLowerCase().includes(q))
-    );
-  }, [leads, searchFilter]);
+    let result = leads;
+    if (searchFilter.trim()) {
+      const q = searchFilter.toLowerCase();
+      result = result.filter(l =>
+        (l.nome_decisor?.toLowerCase().includes(q)) ||
+        (l.nome_empresa?.toLowerCase().includes(q)) ||
+        (l.cidade?.toLowerCase().includes(q)) ||
+        (l.termo_pesquisa?.toLowerCase().includes(q))
+      );
+    }
+    if (filterHasPhone) result = result.filter(l => l.telefone);
+    if (filterHasSite) result = result.filter(l => l.site);
+    if (filterCity.trim()) {
+      const c = filterCity.toLowerCase();
+      result = result.filter(l => l.cidade?.toLowerCase().includes(c));
+    }
+    return result;
+  }, [leads, searchFilter, filterHasPhone, filterHasSite, filterCity]);
+
+  const hasActiveTableFilters = filterHasPhone || filterHasSite || filterCity.trim() !== "" || searchFilter.trim() !== "";
 
   // Add job title
   const addTitle = (title: string) => {

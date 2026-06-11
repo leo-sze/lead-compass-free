@@ -179,6 +179,35 @@ export default function PhoneLookup() {
     setResults(lines.map(lookup));
   };
 
+  const handleQueryFile = (file: File) => {
+    Papa.parse<string[]>(file, {
+      skipEmptyLines: true,
+      complete: (res) => {
+        const phones: string[] = [];
+        const seen = new Set<string>();
+        for (const row of res.data) {
+          const cells = Array.isArray(row) ? row : Object.values(row as Record<string, string>);
+          for (const cell of cells) {
+            const raw = String(cell ?? "").trim();
+            const norm = normalizePhone(raw);
+            if (norm.length >= 10 && norm.length <= 11 && !seen.has(norm)) {
+              seen.add(norm);
+              phones.push(raw);
+            }
+          }
+        }
+        if (phones.length === 0) {
+          toast({ title: "Nenhum telefone encontrado no arquivo", variant: "destructive" });
+          return;
+        }
+        setBulkInput(phones.join("\n"));
+        setResults(phones.map(lookup));
+        toast({ title: "Lista processada", description: `${phones.length} telefones consultados.` });
+      },
+      error: (e) => toast({ title: "Erro ao ler CSV", description: e.message, variant: "destructive" }),
+    });
+  };
+
   const exportCsv = () => {
     const csv = Papa.unparse(
       results.map((r) => ({
@@ -294,9 +323,31 @@ export default function PhoneLookup() {
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
               />
-              <Button onClick={runBulk}>
-                <Search className="h-4 w-4 mr-1" /> Buscar todos
-              </Button>
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={runBulk}>
+                  <Search className="h-4 w-4 mr-1" /> Buscar todos
+                </Button>
+                <label className="inline-flex">
+                  <Button variant="outline" asChild>
+                    <span className="cursor-pointer">
+                      <Upload className="h-4 w-4 mr-1" /> Carregar CSV de telefones
+                    </span>
+                  </Button>
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleQueryFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O CSV pode ter qualquer formato — todos os valores que parecerem telefone serão consultados.
+              </p>
             </CardContent>
           </Card>
         </>

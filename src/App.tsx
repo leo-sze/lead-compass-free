@@ -28,6 +28,7 @@ const App = () => (
             <Route path="/linkedin-search" element={<LinkedInSearch />} />
             <Route path="/leads" element={<Leads />} />
             <Route path="/find-contacts" element={<FindContacts />} />
+            <Route path="/phone-lookup" element={<PhoneLookup />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

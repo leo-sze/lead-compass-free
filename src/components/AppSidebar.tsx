@@ -19,6 +19,7 @@ const items = [
   { title: "LinkedIn", url: "/linkedin-search", icon: Linkedin },
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Encontrar Contatos", url: "/find-contacts", icon: Phone },
+  { title: "Buscar por Telefone", url: "/phone-lookup", icon: PhoneCall },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 

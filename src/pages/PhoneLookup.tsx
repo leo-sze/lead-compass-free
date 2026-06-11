@@ -294,9 +294,31 @@ export default function PhoneLookup() {
                 value={bulkInput}
                 onChange={(e) => setBulkInput(e.target.value)}
               />
-              <Button onClick={runBulk}>
-                <Search className="h-4 w-4 mr-1" /> Buscar todos
-              </Button>
+              <div className="flex gap-2 flex-wrap">
+                <Button onClick={runBulk}>
+                  <Search className="h-4 w-4 mr-1" /> Buscar todos
+                </Button>
+                <label className="inline-flex">
+                  <Button variant="outline" asChild>
+                    <span className="cursor-pointer">
+                      <Upload className="h-4 w-4 mr-1" /> Carregar CSV de telefones
+                    </span>
+                  </Button>
+                  <input
+                    type="file"
+                    accept=".csv,.txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleQueryFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                O CSV pode ter qualquer formato — todos os valores que parecerem telefone serão consultados.
+              </p>
             </CardContent>
           </Card>
         </>

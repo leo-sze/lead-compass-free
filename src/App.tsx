@@ -10,6 +10,7 @@ import LinkedInSearch from "./pages/LinkedInSearch";
 import Leads from "./pages/Leads";
 import SettingsPage from "./pages/SettingsPage";
 import FindContacts from "./pages/FindContacts";
+import PhoneLookup from "./pages/PhoneLookup";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

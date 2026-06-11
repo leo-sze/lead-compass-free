@@ -1,4 +1,4 @@
-import { Search, Globe, Linkedin, Users, Settings, Zap, Phone } from "lucide-react";
+import { Search, Globe, Linkedin, Users, Settings, Zap, Phone, PhoneSearch } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {

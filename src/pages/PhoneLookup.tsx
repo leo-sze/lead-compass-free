@@ -179,6 +179,35 @@ export default function PhoneLookup() {
     setResults(lines.map(lookup));
   };
 
+  const handleQueryFile = (file: File) => {
+    Papa.parse<string[]>(file, {
+      skipEmptyLines: true,
+      complete: (res) => {
+        const phones: string[] = [];
+        const seen = new Set<string>();
+        for (const row of res.data) {
+          const cells = Array.isArray(row) ? row : Object.values(row as Record<string, string>);
+          for (const cell of cells) {
+            const raw = String(cell ?? "").trim();
+            const norm = normalizePhone(raw);
+            if (norm.length >= 10 && norm.length <= 11 && !seen.has(norm)) {
+              seen.add(norm);
+              phones.push(raw);
+            }
+          }
+        }
+        if (phones.length === 0) {
+          toast({ title: "Nenhum telefone encontrado no arquivo", variant: "destructive" });
+          return;
+        }
+        setBulkInput(phones.join("\n"));
+        setResults(phones.map(lookup));
+        toast({ title: "Lista processada", description: `${phones.length} telefones consultados.` });
+      },
+      error: (e) => toast({ title: "Erro ao ler CSV", description: e.message, variant: "destructive" }),
+    });
+  };
+
   const exportCsv = () => {
     const csv = Papa.unparse(
       results.map((r) => ({

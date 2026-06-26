@@ -158,6 +158,8 @@ const GoogleSearch = () => {
       const cnpjs = allLeads.map((l) => l.cnpj?.replace(/\D/g, "")).filter(Boolean) as string[];
       let existingPhones = new Set<string>();
       let existingCnpjs = new Set<string>();
+      let blockedPhones = new Set<string>();
+      let blockedCnpjs = new Set<string>();
       if (phones.length > 0 || cnpjs.length > 0) {
         const [{ data: existingPhonesRows }, { data: deletedPhonesRows }, { data: existingCnpjRows }, { data: deletedCnpjRows }] = await Promise.all([
           phones.length > 0 ? supabase.from("leads").select("telefone").in("telefone", phones) : Promise.resolve({ data: [] as any[] }),
@@ -165,24 +167,32 @@ const GoogleSearch = () => {
           cnpjs.length > 0 ? supabase.from("leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
           cnpjs.length > 0 ? supabase.from("deleted_leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
         ]);
-        existingPhones = new Set([
-          ...((existingPhonesRows || []).map((r: any) => r.telefone)),
-          ...((deletedPhonesRows || []).map((r: any) => r.telefone)),
-        ]);
-        existingCnpjs = new Set([
-          ...((existingCnpjRows || []).map((r: any) => r.cnpj)),
-          ...((deletedCnpjRows || []).map((r: any) => r.cnpj)),
-        ]);
+        existingPhones = new Set((existingPhonesRows || []).map((r: any) => r.telefone));
+        blockedPhones = new Set((deletedPhonesRows || []).map((r: any) => r.telefone));
+        existingCnpjs = new Set((existingCnpjRows || []).map((r: any) => r.cnpj));
+        blockedCnpjs = new Set((deletedCnpjRows || []).map((r: any) => r.cnpj));
       }
 
+      let blockedCount = 0;
+      let duplicateCount = 0;
       const newLeads = allLeads.filter((l) => {
         const cnpj = l.cnpj?.replace(/\D/g, "") || null;
-        return (!l.telefone || !existingPhones.has(l.telefone)) && (!cnpj || !existingCnpjs.has(cnpj));
+        const isBlocked = (l.telefone && blockedPhones.has(l.telefone)) || (cnpj && blockedCnpjs.has(cnpj));
+        if (isBlocked) { blockedCount++; return false; }
+        const isDup = (l.telefone && existingPhones.has(l.telefone)) || (cnpj && existingCnpjs.has(cnpj));
+        if (isDup) { duplicateCount++; return false; }
+        return true;
       });
-      const skipped = allLeads.length - newLeads.length;
 
       setProgress(45);
-      setStatusText(`${newLeads.length} novos leads · ${skipped} já existentes (pulados). Salvando...`);
+      setStatusText(`${newLeads.length} novos · ${duplicateCount} já no banco · ${blockedCount} excluídos antes (bloqueados). Salvando...`);
+
+      if (newLeads.length === 0) {
+        toast({
+          title: "Nenhum lead novo",
+          description: `Bruto: ${allLeads.length} · Duplicados: ${duplicateCount} · Bloqueados (excluídos antes): ${blockedCount}. Os bloqueados não voltam — limpe a tabela deleted_leads se quiser reusá-los.`,
+        });
+      }
 
       // ── Stage 3: Insert new leads ───────────────────────────
       const savedLeads: Array<{ id: string; transient: any }> = [];
@@ -263,7 +273,7 @@ const GoogleSearch = () => {
       setStatusText("Concluído!");
       toast({
         title: "Extração concluída!",
-        description: `${newLeads.length} novos · ${skipped} duplicados pulados · ${totalQueries} buscas executadas.`,
+        description: `${newLeads.length} novos · ${duplicateCount} duplicados · ${blockedCount} bloqueados · ${totalQueries} buscas.`,
       });
       setTimeout(() => navigate("/leads"), 1500);
     } catch (err: any) {

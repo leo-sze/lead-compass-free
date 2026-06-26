@@ -273,7 +273,7 @@ const GoogleSearch = () => {
       setStatusText("Concluído!");
       toast({
         title: "Extração concluída!",
-        description: `${newLeads.length} novos · ${skipped} duplicados pulados · ${totalQueries} buscas executadas.`,
+        description: `${newLeads.length} novos · ${duplicateCount} duplicados · ${blockedCount} bloqueados · ${totalQueries} buscas.`,
       });
       setTimeout(() => navigate("/leads"), 1500);
     } catch (err: any) {

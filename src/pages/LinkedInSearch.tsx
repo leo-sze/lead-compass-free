@@ -220,7 +220,22 @@ const LinkedInSearch = () => {
       let newCount = 0;
       let dupCount = 0;
 
+      // Blocklist: telefones de leads já excluídos não devem voltar
+      const phonesToCheck = newLeads.map((l: any) => l.telefone).filter(Boolean);
+      let blockedPhones = new Set<string>();
+      if (phonesToCheck.length > 0) {
+        const { data: deleted } = await supabase
+          .from("deleted_leads")
+          .select("telefone")
+          .in("telefone", phonesToCheck);
+        blockedPhones = new Set((deleted || []).map((r: any) => r.telefone));
+      }
+
       for (const lead of newLeads) {
+        if (lead.telefone && blockedPhones.has(lead.telefone)) {
+          dupCount++;
+          continue;
+        }
         const { error: insertError } = await supabase.from("leads").upsert(
           {
             nome_empresa: lead.nome_empresa,

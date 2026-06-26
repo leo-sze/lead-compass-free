@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { normalizePhone } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Lead = Tables<"leads"> & {
@@ -221,30 +222,39 @@ const LinkedInSearch = () => {
       let dupCount = 0;
 
       // Blocklist: telefones de leads já excluídos não devem voltar
-      const phonesToCheck = newLeads.map((l: any) => l.telefone).filter(Boolean);
+      const phonesToCheck = newLeads.map((l: any) => normalizePhone(l.telefone)).filter(Boolean);
+      const cnpjsToCheck = newLeads.map((l: any) => l.cnpj?.replace(/\D/g, "")).filter(Boolean);
       let blockedPhones = new Set<string>();
-      if (phonesToCheck.length > 0) {
-        const { data: deleted } = await supabase
-          .from("deleted_leads")
-          .select("telefone")
-          .in("telefone", phonesToCheck);
-        blockedPhones = new Set((deleted || []).map((r: any) => r.telefone));
+      let blockedCnpjs = new Set<string>();
+      if (phonesToCheck.length > 0 || cnpjsToCheck.length > 0) {
+        const [{ data: deletedPhones }, { data: deletedCnpjs }] = await Promise.all([
+          phonesToCheck.length > 0
+            ? supabase.from("deleted_leads").select("telefone").in("telefone", phonesToCheck)
+            : Promise.resolve({ data: [] as any[] }),
+          cnpjsToCheck.length > 0
+            ? supabase.from("deleted_leads").select("cnpj").in("cnpj", cnpjsToCheck)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
+        blockedPhones = new Set((deletedPhones || []).map((r: any) => r.telefone));
+        blockedCnpjs = new Set((deletedCnpjs || []).map((r: any) => r.cnpj));
       }
 
       for (const lead of newLeads) {
-        if (lead.telefone && blockedPhones.has(lead.telefone)) {
+        const telefone = normalizePhone(lead.telefone);
+        const cnpj = lead.cnpj?.replace(/\D/g, "") || null;
+        if ((telefone && blockedPhones.has(telefone)) || (cnpj && blockedCnpjs.has(cnpj))) {
           dupCount++;
           continue;
         }
         const { error: insertError } = await supabase.from("leads").upsert(
           {
             nome_empresa: lead.nome_empresa,
-            telefone: lead.telefone || null,
+            telefone,
             site: lead.site || null,
             endereco: lead.endereco || null,
             instagram: lead.instagram || null,
             linkedin: lead.linkedin || null,
-            cnpj: lead.cnpj || null,
+            cnpj,
             nome_decisor: lead.nome_decisor || null,
             query_origem: `${jobTitles.join(", ")}${industry ? ` / ${industry}` : ""}${keywords ? ` [${keywords}]` : ""} - ${location}`,
             termo_pesquisa: lead.cargo || jobTitles[0],
@@ -295,7 +305,40 @@ const LinkedInSearch = () => {
   const deleteSelected = async () => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
-    await supabase.from("leads").delete().in("id", ids);
+    const rows = Array.from(new Map(leads
+      .filter((lead) => selected.has(lead.id))
+      .map((lead) => ({
+        telefone: normalizePhone(lead.telefone),
+        nome_empresa: lead.nome_empresa,
+        cnpj: lead.cnpj?.replace(/\D/g, "") || null,
+      }))
+      .filter((row) => row.telefone || row.cnpj)
+      .map((row) => [`${row.telefone || ""}|${row.cnpj || ""}`, row])).values());
+    if (rows.length > 0) {
+      const phones = rows.map((row) => row.telefone).filter(Boolean) as string[];
+      const cnpjs = rows.map((row) => row.cnpj).filter(Boolean) as string[];
+      const [{ data: existingPhones }, { data: existingCnpjs }] = await Promise.all([
+        phones.length > 0 ? supabase.from("deleted_leads").select("telefone").in("telefone", phones) : Promise.resolve({ data: [] as any[] }),
+        cnpjs.length > 0 ? supabase.from("deleted_leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const blockedPhones = new Set((existingPhones || []).map((row: any) => row.telefone));
+      const blockedCnpjs = new Set((existingCnpjs || []).map((row: any) => row.cnpj));
+      const toInsert = rows.filter((row) => {
+        if ((row.telefone && blockedPhones.has(row.telefone)) || (row.cnpj && blockedCnpjs.has(row.cnpj))) return false;
+        if (row.telefone) blockedPhones.add(row.telefone);
+        if (row.cnpj) blockedCnpjs.add(row.cnpj);
+        return true;
+      });
+      if (toInsert.length > 0) {
+        const { error: blockError } = await supabase.from("deleted_leads").insert(toInsert);
+        if (blockError) console.error("Failed to record deleted leads:", blockError);
+      }
+    }
+    const { error } = await supabase.from("leads").delete().in("id", ids);
+    if (error) {
+      toast({ title: "Erro ao excluir leads", description: error.message, variant: "destructive" });
+      return;
+    }
     setLeads(prev => prev.filter(l => !selected.has(l.id)));
     setSelected(new Set());
     toast({ title: `${ids.length} leads removidos` });

@@ -238,6 +238,38 @@ const Leads = () => {
     [leads, selected]
   );
 
+  const recordDeletedLeads = async (items: Lead[]) => {
+    const rows = Array.from(new Map(items
+      .map((lead) => ({
+        telefone: normalizePhone(lead.telefone),
+        nome_empresa: lead.nome_empresa,
+        cnpj: lead.cnpj?.replace(/\D/g, "") || null,
+      }))
+      .filter((row) => row.telefone || row.cnpj)
+      .map((row) => [`${row.telefone || ""}|${row.cnpj || ""}`, row])).values());
+
+    if (rows.length > 0) {
+      const phones = rows.map((row) => row.telefone).filter(Boolean) as string[];
+      const cnpjs = rows.map((row) => row.cnpj).filter(Boolean) as string[];
+      const [{ data: existingPhones }, { data: existingCnpjs }] = await Promise.all([
+        phones.length > 0 ? supabase.from("deleted_leads").select("telefone").in("telefone", phones) : Promise.resolve({ data: [] as any[] }),
+        cnpjs.length > 0 ? supabase.from("deleted_leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const blockedPhones = new Set((existingPhones || []).map((row: any) => row.telefone));
+      const blockedCnpjs = new Set((existingCnpjs || []).map((row: any) => row.cnpj));
+      const toInsert = rows.filter((row) => {
+        if ((row.telefone && blockedPhones.has(row.telefone)) || (row.cnpj && blockedCnpjs.has(row.cnpj))) return false;
+        if (row.telefone) blockedPhones.add(row.telefone);
+        if (row.cnpj) blockedCnpjs.add(row.cnpj);
+        return true;
+      });
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from("deleted_leads").insert(toInsert);
+        if (error) console.error("Failed to record deleted leads:", error);
+      }
+    }
+  };
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -260,7 +292,13 @@ const Leads = () => {
       toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });
       return;
     }
-    await supabase.from("leads").delete().in("id", exportedIds);
+    const leadsToDelete = leads.filter((l) => exportedIds.includes(l.id));
+    await recordDeletedLeads(leadsToDelete);
+    const { error } = await supabase.from("leads").delete().in("id", exportedIds);
+    if (error) {
+      toast({ title: "Erro ao excluir leads", description: error.message, variant: "destructive" });
+      return;
+    }
     setLeads((prev) => prev.filter((l) => !exportedIds.includes(l.id)));
     setSelected((prev) => {
       const next = new Set(prev);
@@ -308,7 +346,12 @@ const Leads = () => {
   const deleteSelected = async () => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
-    await supabase.from("leads").delete().in("id", ids);
+    await recordDeletedLeads(selectedLeads);
+    const { error } = await supabase.from("leads").delete().in("id", ids);
+    if (error) {
+      toast({ title: "Erro ao excluir leads", description: error.message, variant: "destructive" });
+      return;
+    }
     setLeads((prev) => prev.filter((l) => !selected.has(l.id)));
     setSelected(new Set());
     toast({ title: `${ids.length} leads removidos` });
@@ -329,9 +372,14 @@ const Leads = () => {
       toast({ title: "Nenhuma duplicata encontrada" });
       return;
     }
+    await recordDeletedLeads(leads.filter((l) => duplicateIds.includes(l.id)));
     for (let i = 0; i < duplicateIds.length; i += 100) {
       const batch = duplicateIds.slice(i, i + 100);
-      await supabase.from("leads").delete().in("id", batch);
+      const { error } = await supabase.from("leads").delete().in("id", batch);
+      if (error) {
+        toast({ title: "Erro ao excluir duplicatas", description: error.message, variant: "destructive" });
+        return;
+      }
     }
     setLeads((prev) => prev.filter((l) => !duplicateIds.includes(l.id)));
     toast({ title: `${duplicateIds.length} duplicatas removidas` });

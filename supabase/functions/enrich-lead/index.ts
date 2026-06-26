@@ -64,24 +64,75 @@ async function scrapeUrl(url: string, apiKey: string): Promise<string> {
 }
 
 // ─── ESTÁGIO 1: Encontrar CNPJ ───
-async function findCnpj(nome: string, cidade: string | null, firecrawlKey: string): Promise<string | null> {
+// Extrai 14 dígitos consecutivos (formato URL casadosdados) e formata como CNPJ
+function extractCnpjFromText(text: string): string | null {
+  const formatted = text.match(CNPJ_REGEX);
+  if (formatted?.length) return formatted[0];
+  // URL pattern: /empresa/12345678000190
+  const urlMatch = text.match(/\/(?:empresa|cnpj)\/(\d{14})/i);
+  if (urlMatch) {
+    const d = urlMatch[1];
+    return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+  }
+  // Bare 14 digits as fallback
+  const bare = text.match(/\b(\d{14})\b/);
+  if (bare) {
+    const d = bare[1];
+    return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12,14)}`;
+  }
+  return null;
+}
+
+async function findCnpj(
+  nome: string,
+  cidade: string | null,
+  telefone: string | null,
+  firecrawlKey: string
+): Promise<string | null> {
   const locationQ = cidade ? ` "${cidade}"` : "";
 
+  // Estratégia 1: busca genérica
   const text1 = await searchWeb(`"${nome}"${locationQ} CNPJ`, firecrawlKey);
-  const matches1 = text1.match(CNPJ_REGEX);
-  if (matches1?.length) {
-    console.log(`[CNPJ] Encontrado: ${matches1[0]} via busca genérica`);
-    return matches1[0];
+  const m1 = extractCnpjFromText(text1);
+  if (m1) {
+    console.log(`[CNPJ] Encontrado: ${m1} via busca genérica`);
+    return m1;
   }
 
+  // Estratégia 2: casa dos dados com cidade
   const text2 = await searchWeb(`"${nome}"${locationQ} site:casadosdados.com.br`, firecrawlKey);
-  const matches2 = text2.match(CNPJ_REGEX);
-  if (matches2?.length) {
-    console.log(`[CNPJ] Encontrado: ${matches2[0]} via casadosdados`);
-    return matches2[0];
+  const m2 = extractCnpjFromText(text2);
+  if (m2) {
+    console.log(`[CNPJ] Encontrado: ${m2} via casadosdados+cidade`);
+    return m2;
   }
 
-  console.log("[CNPJ] Não encontrado após 2 tentativas");
+  // Estratégia 3: casa dos dados apenas por nome (sem cidade, sem "CNPJ")
+  const text3 = await searchWeb(`site:casadosdados.com.br "${nome}"`, firecrawlKey);
+  const m3 = extractCnpjFromText(text3);
+  if (m3) {
+    console.log(`[CNPJ] Encontrado: ${m3} via casadosdados só-nome`);
+    return m3;
+  }
+
+  // Estratégia 4: busca pelo telefone
+  if (telefone && telefone.trim()) {
+    const tel = telefone.trim();
+    const text4a = await searchWeb(`"${tel}" CNPJ`, firecrawlKey);
+    const m4a = extractCnpjFromText(text4a);
+    if (m4a) {
+      console.log(`[CNPJ] Encontrado: ${m4a} via telefone+CNPJ`);
+      return m4a;
+    }
+    const text4b = await searchWeb(`site:casadosdados.com.br "${tel}"`, firecrawlKey);
+    const m4b = extractCnpjFromText(text4b);
+    if (m4b) {
+      console.log(`[CNPJ] Encontrado: ${m4b} via telefone+casadosdados`);
+      return m4b;
+    }
+  }
+
+  console.log("[CNPJ] Não encontrado após todas as estratégias");
   return null;
 }
 
@@ -442,7 +493,7 @@ Deno.serve(async (req) => {
     // ── ESTÁGIO 1: CNPJ ──
     let foundCnpj = cnpj || null;
     if (!foundCnpj) {
-      foundCnpj = await findCnpj(nome_empresa, cidade, FIRECRAWL_API_KEY);
+      foundCnpj = await findCnpj(nome_empresa, cidade, telefone || null, FIRECRAWL_API_KEY);
     }
     if (foundCnpj) {
       updates.cnpj = foundCnpj;

@@ -493,7 +493,7 @@ Deno.serve(async (req) => {
     // ── ESTÁGIO 1: CNPJ ──
     let foundCnpj = cnpj || null;
     if (!foundCnpj) {
-      foundCnpj = await findCnpj(nome_empresa, cidade, FIRECRAWL_API_KEY);
+      foundCnpj = await findCnpj(nome_empresa, cidade, telefone || null, FIRECRAWL_API_KEY);
     }
     if (foundCnpj) {
       updates.cnpj = foundCnpj;

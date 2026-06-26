@@ -616,7 +616,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { query, location, setor, keywords, apiKey, provider, source } = parsed.data;
+    const { query, location, setor, keywords, apiKey, provider, source, fastMode } = parsed.data;
     const lovableKey = Deno.env.get("LOVABLE_API_KEY") || "";
     const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY") || "";
 

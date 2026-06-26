@@ -323,7 +323,12 @@ const LinkedInSearch = () => {
       ]);
       const blockedPhones = new Set((existingPhones || []).map((row: any) => row.telefone));
       const blockedCnpjs = new Set((existingCnpjs || []).map((row: any) => row.cnpj));
-      const toInsert = rows.filter((row) => !((row.telefone && blockedPhones.has(row.telefone)) || (row.cnpj && blockedCnpjs.has(row.cnpj))));
+      const toInsert = rows.filter((row) => {
+        if ((row.telefone && blockedPhones.has(row.telefone)) || (row.cnpj && blockedCnpjs.has(row.cnpj))) return false;
+        if (row.telefone) blockedPhones.add(row.telefone);
+        if (row.cnpj) blockedCnpjs.add(row.cnpj);
+        return true;
+      });
       if (toInsert.length > 0) {
         const { error: blockError } = await supabase.from("deleted_leads").insert(toInsert);
         if (blockError) console.error("Failed to record deleted leads:", blockError);

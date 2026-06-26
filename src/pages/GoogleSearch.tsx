@@ -1,26 +1,94 @@
-import { useState } from "react";
-import { Search, MapPin, Zap, Loader2, Globe } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, MapPin, Zap, Loader2, Globe, Target, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { normalizePhone } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
+// ─── Niche presets ──────────────────────────────────────────────
+const NICHE_PRESETS: Record<string, { label: string; terms: string[] }> = {
+  esportivo: {
+    label: "Mercado Esportivo",
+    terms: [
+      "academia de ginástica",
+      "crossfit",
+      "studio de pilates",
+      "studio funcional",
+      "escola de natação",
+      "artes marciais",
+      "jiu jitsu",
+      "muay thai",
+      "yoga studio",
+      "beach tennis",
+      "padel",
+    ],
+  },
+};
+
+// ─── City subdivisions (zones / well-known bairros) ─────────────
+const CITY_SUBDIVISIONS: Record<string, string[]> = {
+  "sao paulo": [
+    "Pinheiros", "Vila Madalena", "Itaim Bibi", "Moema", "Vila Olímpia",
+    "Jardins", "Brooklin", "Tatuapé", "Mooca", "Santana", "Perdizes",
+    "Lapa", "Ipiranga", "Vila Mariana", "Morumbi",
+  ],
+  "rio de janeiro": [
+    "Copacabana", "Ipanema", "Leblon", "Barra da Tijuca", "Botafogo",
+    "Tijuca", "Recreio", "Flamengo", "Méier", "Jacarepaguá",
+  ],
+  "belo horizonte": [
+    "Savassi", "Lourdes", "Funcionários", "Buritis", "Belvedere",
+    "Castelo", "Pampulha", "Santa Tereza", "Cidade Nova",
+  ],
+  "curitiba": [
+    "Batel", "Água Verde", "Bigorrilho", "Centro", "Cabral",
+    "Champagnat", "Ecoville", "Portão", "Boa Vista", "Mercês",
+  ],
+  "porto alegre": [
+    "Moinhos de Vento", "Bela Vista", "Petrópolis", "Menino Deus",
+    "Cidade Baixa", "Higienópolis", "Auxiliadora", "Mont'Serrat",
+  ],
+};
+
+function cityKey(city: string): string {
+  return city.trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 const GoogleSearch = () => {
+  const [niche, setNiche] = useState<string>("custom");
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
+  const [useSubdivisions, setUseSubdivisions] = useState(true);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusText, setStatusText] = useState("");
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  const detectedSubdivisions = useMemo(() => {
+    return CITY_SUBDIVISIONS[cityKey(location)] || [];
+  }, [location]);
+
   const handleSearch = async () => {
-    if (!query.trim() || !location.trim()) {
-      toast({ title: "Preencha ambos os campos", variant: "destructive" });
+    // Build term list
+    const terms: string[] = niche !== "custom"
+      ? NICHE_PRESETS[niche].terms
+      : [query.trim()].filter(Boolean);
+
+    if (terms.length === 0) {
+      toast({ title: "Informe um termo de busca ou escolha um nicho", variant: "destructive" });
+      return;
+    }
+    if (!location.trim()) {
+      toast({ title: "Informe a cidade", variant: "destructive" });
       return;
     }
 
@@ -34,49 +102,90 @@ const GoogleSearch = () => {
       return;
     }
 
+    // Build location list (city or subdivisions of city)
+    const locations: string[] = useSubdivisions && detectedSubdivisions.length > 0
+      ? detectedSubdivisions.map((b) => `${b}, ${location.trim()}`)
+      : [location.trim()];
+
     setLoading(true);
-    setProgress(5);
-    setStatusText("Iniciando busca no Google Maps...");
+    setProgress(2);
+    const totalQueries = terms.length * locations.length;
+    let doneQueries = 0;
+
+    // ── Stage 1: Collect raw leads from Google Maps ────────────
+    const collected = new Map<string, any>(); // dedup key: phone or fallback
 
     try {
-      setProgress(15);
-      setStatusText("Consultando Google Maps...");
+      for (const term of terms) {
+        for (const loc of locations) {
+          doneQueries++;
+          setStatusText(`Buscando "${term}" em ${loc}... (${doneQueries}/${totalQueries})`);
+          setProgress(Math.round((doneQueries / totalQueries) * 30));
 
-      const { data, error } = await supabase.functions.invoke("extract-leads", {
-        body: {
-          query: query.trim(),
-          location: location.trim(),
-          apiKey: apiKeyData.value,
-          provider: providerData?.value || "serpapi",
-          source: "google",
-        },
-      });
+          try {
+            const { data, error } = await supabase.functions.invoke("extract-leads", {
+              body: {
+                query: term,
+                location: loc,
+                apiKey: apiKeyData.value,
+                provider: providerData?.value || "serpapi",
+                source: "google",
+              },
+            });
+            if (error) {
+              console.error("extract-leads error:", error);
+              continue;
+            }
+            for (const lead of (data?.leads || [])) {
+              const phone = normalizePhone(lead.telefone || null);
+              const key = phone || `name:${(lead.nome_empresa || "").toLowerCase()}|${loc.toLowerCase()}`;
+              if (!collected.has(key)) {
+                collected.set(key, { ...lead, telefone: phone, _term: term, _loc: loc });
+              }
+            }
+          } catch (e) {
+            console.error(`Search failed for ${term} in ${loc}:`, e);
+          }
+        }
+      }
 
-      if (error) throw error;
-
-      const leads = data?.leads || [];
-
+      const allLeads = Array.from(collected.values());
       setProgress(35);
-      setStatusText(`${leads.length} leads encontrados. Salvando...`);
+      setStatusText(`${allLeads.length} leads únicos encontrados. Checando duplicatas no banco...`);
 
-      // Save leads to DB and collect IDs + transient data
+      // ── Stage 2: Dedup against existing leads in DB ─────────
+      const phones = allLeads.map((l) => l.telefone).filter(Boolean) as string[];
+      let existingPhones = new Set<string>();
+      if (phones.length > 0) {
+        const { data: existing } = await supabase
+          .from("leads")
+          .select("telefone")
+          .in("telefone", phones);
+        existingPhones = new Set((existing || []).map((r: any) => r.telefone));
+      }
+
+      const newLeads = allLeads.filter((l) => !l.telefone || !existingPhones.has(l.telefone));
+      const skipped = allLeads.length - newLeads.length;
+
+      setProgress(45);
+      setStatusText(`${newLeads.length} novos leads · ${skipped} já existentes (pulados). Salvando...`);
+
+      // ── Stage 3: Insert new leads ───────────────────────────
       const savedLeads: Array<{ id: string; transient: any }> = [];
-
-      for (const lead of leads) {
-        const { data: saved, error: insertError } = await supabase.from("leads").upsert(
+      for (const lead of newLeads) {
+        const { data: saved } = await supabase.from("leads").upsert(
           {
             nome_empresa: lead.nome_empresa,
-            telefone: normalizePhone(lead.telefone || null),
+            telefone: lead.telefone || null,
             site: lead.site || null,
             endereco: lead.endereco || null,
             instagram: lead.instagram || null,
             linkedin: lead.linkedin || null,
             cnpj: lead.cnpj || null,
-            query_origem: `${query} - ${location}`,
-            termo_pesquisa: query.trim(),
+            query_origem: `${lead._term} - ${lead._loc}`,
+            termo_pesquisa: lead._term,
             cidade: lead.cidade || location.trim(),
             fonte: "google",
-            // Store scoring input for re-analysis later
             score_breakdown: {
               rating: lead.rating,
               total_reviews: lead.total_reviews,
@@ -90,22 +199,17 @@ const GoogleSearch = () => {
           { onConflict: "nome_empresa,telefone" }
         ).select("id").maybeSingle();
 
-        if (saved) {
-          savedLeads.push({ id: saved.id, transient: lead });
-        }
+        if (saved) savedLeads.push({ id: saved.id, transient: lead });
       }
 
-      // Score leads via AI in batches of 5
-      setProgress(40);
+      // ── Stage 4: Score via AI in batches of 5 ───────────────
+      setProgress(50);
       setStatusText("Analisando qualidade via IA...");
-
       const SCORE_BATCH = 5;
       let scored = 0;
-
       for (let i = 0; i < savedLeads.length; i += SCORE_BATCH) {
         const batch = savedLeads.slice(i, i + SCORE_BATCH);
-
-        const scorePromises = batch.map(async ({ id, transient: t }) => {
+        await Promise.all(batch.map(async ({ id, transient: t }) => {
           try {
             const { data: scoreData, error: scoreError } = await supabase.functions.invoke("score-lead", {
               body: {
@@ -122,7 +226,6 @@ const GoogleSearch = () => {
                 reviews: t.reviews || [],
               },
             });
-
             if (!scoreError && scoreData && !scoreData.error) {
               await supabase.from("leads").update({
                 score: scoreData.score,
@@ -135,11 +238,9 @@ const GoogleSearch = () => {
           } catch (e) {
             console.error("Score error for", t.nome_empresa, e);
           }
-        });
-
-        await Promise.all(scorePromises);
+        }));
         scored += batch.length;
-        const pct = 40 + Math.round((scored / savedLeads.length) * 55);
+        const pct = 50 + Math.round((scored / Math.max(savedLeads.length, 1)) * 45);
         setProgress(pct);
         setStatusText(`Analisando qualidade via IA... ${scored}/${savedLeads.length}`);
       }
@@ -148,7 +249,7 @@ const GoogleSearch = () => {
       setStatusText("Concluído!");
       toast({
         title: "Extração concluída!",
-        description: `${leads.length} leads encontrados e analisados por IA.`,
+        description: `${newLeads.length} novos · ${skipped} duplicados pulados · ${totalQueries} buscas executadas.`,
       });
       setTimeout(() => navigate("/leads"), 1500);
     } catch (err: any) {
@@ -157,6 +258,8 @@ const GoogleSearch = () => {
       setTimeout(() => { setLoading(false); setProgress(0); setStatusText(""); }, 2000);
     }
   };
+
+  const activeTerms = niche !== "custom" ? NICHE_PRESETS[niche].terms : [];
 
   return (
     <div className="max-w-2xl mx-auto mt-12">
@@ -178,20 +281,49 @@ const GoogleSearch = () => {
           <CardTitle className="text-lg">Nova Extração — Google Maps</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Niche selector */}
           <div className="space-y-2">
-            <label className="text-sm font-medium text-muted-foreground">Nicho / Segmento</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Ex: Restaurantes, Clínicas, Academias..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                className="pl-10 bg-secondary/50 border-border/50"
-                disabled={loading}
-              />
-            </div>
+            <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Target className="h-4 w-4" /> Nicho
+            </label>
+            <Select value={niche} onValueChange={setNiche} disabled={loading}>
+              <SelectTrigger className="bg-secondary/50 border-border/50">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="custom">Personalizado (digite o termo)</SelectItem>
+                {Object.entries(NICHE_PRESETS).map(([key, p]) => (
+                  <SelectItem key={key} value={key}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {activeTerms.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {activeTerms.map((t) => (
+                  <Badge key={t} variant="secondary" className="text-xs font-normal">{t}</Badge>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Custom term (only when niche=custom) */}
+          {niche === "custom" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-muted-foreground">Nicho / Segmento</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Ex: Restaurantes, Clínicas, Academias..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="pl-10 bg-secondary/50 border-border/50"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* City */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">Cidade / Região</label>
             <div className="relative">
@@ -205,6 +337,45 @@ const GoogleSearch = () => {
               />
             </div>
           </div>
+
+          {/* Subdivisions */}
+          {detectedSubdivisions.length > 0 && (
+            <div className="space-y-2 p-3 rounded-md bg-secondary/30 border border-border/50">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="subs"
+                  checked={useSubdivisions}
+                  onCheckedChange={(v) => setUseSubdivisions(!!v)}
+                  disabled={loading}
+                />
+                <label htmlFor="subs" className="text-sm font-medium flex items-center gap-2 cursor-pointer">
+                  <Layers className="h-4 w-4" />
+                  Subdividir busca por {detectedSubdivisions.length} bairros/zonas
+                </label>
+              </div>
+              {useSubdivisions && (
+                <div className="flex flex-wrap gap-1.5 pl-6">
+                  {detectedSubdivisions.map((b) => (
+                    <Badge key={b} variant="outline" className="text-xs font-normal">{b}</Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Query plan summary */}
+          {(activeTerms.length > 0 || query.trim()) && location.trim() && (
+            <div className="text-xs text-muted-foreground bg-primary/5 border border-primary/20 rounded-md p-3">
+              <strong className="text-primary">Plano:</strong>{" "}
+              {(niche !== "custom" ? activeTerms.length : 1)} termo(s) ×{" "}
+              {useSubdivisions && detectedSubdivisions.length > 0 ? detectedSubdivisions.length : 1} região(ões) ={" "}
+              <strong>
+                {(niche !== "custom" ? activeTerms.length : 1) *
+                  (useSubdivisions && detectedSubdivisions.length > 0 ? detectedSubdivisions.length : 1)}
+              </strong>{" "}
+              buscas
+            </div>
+          )}
 
           {loading && (
             <div className="space-y-2 animate-in fade-in">

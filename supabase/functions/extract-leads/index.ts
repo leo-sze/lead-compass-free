@@ -596,7 +596,9 @@ const BodySchema = z.object({
   apiKey: z.string().min(1),
   provider: z.enum(["serpapi", "searchapi"]),
   source: z.enum(["google", "linkedin"]).default("google"),
+  fastMode: z.boolean().optional().default(false),
 });
+
 
 // ─── Main Handler ───────────────────────────────────────────────
 

@@ -215,19 +215,21 @@ async function queryBrasilApi(cnpj: string, retry = true): Promise<BrasilApiResp
   return null;
 }
 
+function toTitleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => w.length ? w[0].toUpperCase() + w.slice(1) : w)
+    .join(" ");
+}
+
 function selectDecisor(qsa: Array<{ nome_socio: string; qualificacao_socio: string }>): string | null {
   if (!qsa?.length) return null;
-  const priorities = [
-    (q: string) => q.toLowerCase().includes("administrador"),
-    (q: string) => q.toLowerCase().includes("diretor") || q.toLowerCase().includes("presidente"),
-    (q: string) => q.toLowerCase().includes("sócio") || q.toLowerCase().includes("socio"),
-  ];
-  for (const check of priorities) {
-    const found = qsa.find(s => check(s.qualificacao_socio));
-    if (found) return found.nome_socio;
-  }
-  return qsa[0].nome_socio;
+  const first = qsa.find(s => s?.nome_socio && String(s.nome_socio).trim().length > 0);
+  if (!first) return null;
+  return toTitleCase(String(first.nome_socio).trim());
 }
+
 
 // ─── ESTÁGIO 4: Fallback IA para decisor ───
 async function aiFallbackDecisor(

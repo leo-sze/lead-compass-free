@@ -248,7 +248,7 @@ const Leads = () => {
       .filter((row) => row.telefone || row.cnpj);
 
     if (rows.length > 0) {
-      await supabase.from("deleted_leads").insert(rows, { ignoreDuplicates: true });
+      await supabase.from("deleted_leads").upsert(rows, { onConflict: "telefone", ignoreDuplicates: true });
     }
   };
 

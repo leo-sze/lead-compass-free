@@ -155,19 +155,30 @@ const GoogleSearch = () => {
 
       // ── Stage 2: Dedup against existing leads + blocklist de excluídos ─────────
       const phones = allLeads.map((l) => l.telefone).filter(Boolean) as string[];
+      const cnpjs = allLeads.map((l) => l.cnpj?.replace(/\D/g, "")).filter(Boolean) as string[];
       let existingPhones = new Set<string>();
-      if (phones.length > 0) {
-        const [{ data: existing }, { data: deleted }] = await Promise.all([
-          supabase.from("leads").select("telefone").in("telefone", phones),
-          supabase.from("deleted_leads").select("telefone").in("telefone", phones),
+      let existingCnpjs = new Set<string>();
+      if (phones.length > 0 || cnpjs.length > 0) {
+        const [{ data: existingPhonesRows }, { data: deletedPhonesRows }, { data: existingCnpjRows }, { data: deletedCnpjRows }] = await Promise.all([
+          phones.length > 0 ? supabase.from("leads").select("telefone").in("telefone", phones) : Promise.resolve({ data: [] as any[] }),
+          phones.length > 0 ? supabase.from("deleted_leads").select("telefone").in("telefone", phones) : Promise.resolve({ data: [] as any[] }),
+          cnpjs.length > 0 ? supabase.from("leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
+          cnpjs.length > 0 ? supabase.from("deleted_leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
         ]);
         existingPhones = new Set([
-          ...((existing || []).map((r: any) => r.telefone)),
-          ...((deleted || []).map((r: any) => r.telefone)),
+          ...((existingPhonesRows || []).map((r: any) => r.telefone)),
+          ...((deletedPhonesRows || []).map((r: any) => r.telefone)),
+        ]);
+        existingCnpjs = new Set([
+          ...((existingCnpjRows || []).map((r: any) => r.cnpj)),
+          ...((deletedCnpjRows || []).map((r: any) => r.cnpj)),
         ]);
       }
 
-      const newLeads = allLeads.filter((l) => !l.telefone || !existingPhones.has(l.telefone));
+      const newLeads = allLeads.filter((l) => {
+        const cnpj = l.cnpj?.replace(/\D/g, "") || null;
+        return (!l.telefone || !existingPhones.has(l.telefone)) && (!cnpj || !existingCnpjs.has(cnpj));
+      });
       const skipped = allLeads.length - newLeads.length;
 
       setProgress(45);
@@ -184,7 +195,7 @@ const GoogleSearch = () => {
             endereco: lead.endereco || null,
             instagram: lead.instagram || null,
             linkedin: lead.linkedin || null,
-            cnpj: lead.cnpj || null,
+            cnpj: lead.cnpj?.replace(/\D/g, "") || null,
             query_origem: `${lead._term} - ${lead._loc}`,
             termo_pesquisa: lead._term,
             cidade: lead.cidade || location.trim(),

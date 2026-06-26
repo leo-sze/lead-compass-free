@@ -238,6 +238,20 @@ const Leads = () => {
     [leads, selected]
   );
 
+  const recordDeletedLeads = async (items: Lead[]) => {
+    const rows = items
+      .map((lead) => ({
+        telefone: normalizePhone(lead.telefone),
+        nome_empresa: lead.nome_empresa,
+        cnpj: lead.cnpj?.replace(/\D/g, "") || null,
+      }))
+      .filter((row) => row.telefone || row.cnpj);
+
+    if (rows.length > 0) {
+      await supabase.from("deleted_leads").insert(rows, { ignoreDuplicates: true });
+    }
+  };
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -260,7 +274,13 @@ const Leads = () => {
       toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });
       return;
     }
-    await supabase.from("leads").delete().in("id", exportedIds);
+    const leadsToDelete = leads.filter((l) => exportedIds.includes(l.id));
+    await recordDeletedLeads(leadsToDelete);
+    const { error } = await supabase.from("leads").delete().in("id", exportedIds);
+    if (error) {
+      toast({ title: "Erro ao excluir leads", description: error.message, variant: "destructive" });
+      return;
+    }
     setLeads((prev) => prev.filter((l) => !exportedIds.includes(l.id)));
     setSelected((prev) => {
       const next = new Set(prev);
@@ -308,7 +328,12 @@ const Leads = () => {
   const deleteSelected = async () => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
-    await supabase.from("leads").delete().in("id", ids);
+    await recordDeletedLeads(selectedLeads);
+    const { error } = await supabase.from("leads").delete().in("id", ids);
+    if (error) {
+      toast({ title: "Erro ao excluir leads", description: error.message, variant: "destructive" });
+      return;
+    }
     setLeads((prev) => prev.filter((l) => !selected.has(l.id)));
     setSelected(new Set());
     toast({ title: `${ids.length} leads removidos` });
@@ -329,9 +354,14 @@ const Leads = () => {
       toast({ title: "Nenhuma duplicata encontrada" });
       return;
     }
+    await recordDeletedLeads(leads.filter((l) => duplicateIds.includes(l.id)));
     for (let i = 0; i < duplicateIds.length; i += 100) {
       const batch = duplicateIds.slice(i, i + 100);
-      await supabase.from("leads").delete().in("id", batch);
+      const { error } = await supabase.from("leads").delete().in("id", batch);
+      if (error) {
+        toast({ title: "Erro ao excluir duplicatas", description: error.message, variant: "destructive" });
+        return;
+      }
     }
     setLeads((prev) => prev.filter((l) => !duplicateIds.includes(l.id)));
     toast({ title: `${duplicateIds.length} duplicatas removidas` });

@@ -215,19 +215,21 @@ async function queryBrasilApi(cnpj: string, retry = true): Promise<BrasilApiResp
   return null;
 }
 
+function toTitleCase(name: string): string {
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map(w => w.length ? w[0].toUpperCase() + w.slice(1) : w)
+    .join(" ");
+}
+
 function selectDecisor(qsa: Array<{ nome_socio: string; qualificacao_socio: string }>): string | null {
   if (!qsa?.length) return null;
-  const priorities = [
-    (q: string) => q.toLowerCase().includes("administrador"),
-    (q: string) => q.toLowerCase().includes("diretor") || q.toLowerCase().includes("presidente"),
-    (q: string) => q.toLowerCase().includes("sócio") || q.toLowerCase().includes("socio"),
-  ];
-  for (const check of priorities) {
-    const found = qsa.find(s => check(s.qualificacao_socio));
-    if (found) return found.nome_socio;
-  }
-  return qsa[0].nome_socio;
+  const first = qsa.find(s => s?.nome_socio && String(s.nome_socio).trim().length > 0);
+  if (!first) return null;
+  return toTitleCase(String(first.nome_socio).trim());
 }
+
 
 // ─── ESTÁGIO 4: Fallback IA para decisor ───
 async function aiFallbackDecisor(
@@ -448,12 +450,14 @@ Deno.serve(async (req) => {
 
     // ── ESTÁGIO 2: B2BLeads (fonte primária) ──
     let decisorFound = false;
+    let decisorFonte: string | null = null;
     if (foundCnpj) {
       const b2bData = await scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
       if (b2bData) {
         if (needsDecisor && b2bData.nome_decisor) {
           updates.nome_decisor = b2bData.nome_decisor;
           decisorFound = true;
+          decisorFonte = "b2bleads";
         }
         if (!telefone && b2bData.telefone) updates.telefone = b2bData.telefone;
         if (!endereco && b2bData.endereco) updates.endereco = b2bData.endereco;
@@ -475,7 +479,8 @@ Deno.serve(async (req) => {
             if (decisor) {
               updates.nome_decisor = decisor;
               decisorFound = true;
-              console.log(`[QSA] Decisor selecionado: ${decisor}`);
+              decisorFonte = "brasilapi_qsa";
+              console.log(`[QSA] Decisor selecionado: ${decisor} (fonte: brasilapi_qsa)`);
             }
           }
           if (!telefone && !updates.telefone && brasilData.telefone?.trim()) {
@@ -497,6 +502,7 @@ Deno.serve(async (req) => {
       const aiDecisor = await aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
       if (aiDecisor) {
         updates.nome_decisor = aiDecisor;
+        decisorFonte = "ia_fallback";
       }
     }
 
@@ -512,10 +518,12 @@ Deno.serve(async (req) => {
       JSON.stringify({
         nome_decisor: updates.nome_decisor || nome_decisor || "Não identificado",
         cargo: "",
+        decisor_fonte: decisorFonte,
         updates,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("enrich-lead error:", message);

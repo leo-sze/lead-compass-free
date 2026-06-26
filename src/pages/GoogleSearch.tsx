@@ -153,15 +153,18 @@ const GoogleSearch = () => {
       setProgress(35);
       setStatusText(`${allLeads.length} leads únicos encontrados. Checando duplicatas no banco...`);
 
-      // ── Stage 2: Dedup against existing leads in DB ─────────
+      // ── Stage 2: Dedup against existing leads + blocklist de excluídos ─────────
       const phones = allLeads.map((l) => l.telefone).filter(Boolean) as string[];
       let existingPhones = new Set<string>();
       if (phones.length > 0) {
-        const { data: existing } = await supabase
-          .from("leads")
-          .select("telefone")
-          .in("telefone", phones);
-        existingPhones = new Set((existing || []).map((r: any) => r.telefone));
+        const [{ data: existing }, { data: deleted }] = await Promise.all([
+          supabase.from("leads").select("telefone").in("telefone", phones),
+          supabase.from("deleted_leads").select("telefone").in("telefone", phones),
+        ]);
+        existingPhones = new Set([
+          ...((existing || []).map((r: any) => r.telefone)),
+          ...((deleted || []).map((r: any) => r.telefone)),
+        ]);
       }
 
       const newLeads = allLeads.filter((l) => !l.telefone || !existingPhones.has(l.telefone));

@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      deleted_leads: {
+        Row: {
+          cnpj: string | null
+          created_at: string
+          id: string
+          nome_empresa: string | null
+          telefone: string | null
+        }
+        Insert: {
+          cnpj?: string | null
+          created_at?: string
+          id?: string
+          nome_empresa?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          cnpj?: string | null
+          created_at?: string
+          id?: string
+          nome_empresa?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           cidade: string | null

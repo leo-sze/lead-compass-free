@@ -115,39 +115,56 @@ const GoogleSearch = () => {
     // ── Stage 1: Collect raw leads from Google Maps ────────────
     const collected = new Map<string, any>(); // dedup key: phone or fallback
 
-    try {
-      for (const term of terms) {
-        for (const loc of locations) {
-          doneQueries++;
-          setStatusText(`Buscando "${term}" em ${loc}... (${doneQueries}/${totalQueries})`);
-          setProgress(Math.round((doneQueries / totalQueries) * 30));
+    // Use fastMode when running multiple queries (skips per-query reviews + CNPJ enrichment)
+    const isMultiQuery = totalQueries > 1;
+    const CONCURRENCY = 4;
 
-          try {
-            const { data, error } = await supabase.functions.invoke("extract-leads", {
-              body: {
-                query: term,
-                location: loc,
-                apiKey: apiKeyData.value,
-                provider: providerData?.value || "serpapi",
-                source: "google",
-              },
-            });
-            if (error) {
-              console.error("extract-leads error:", error);
-              continue;
-            }
-            for (const lead of (data?.leads || [])) {
-              const phone = normalizePhone(lead.telefone || null);
-              const key = phone || `name:${(lead.nome_empresa || "").toLowerCase()}|${loc.toLowerCase()}`;
-              if (!collected.has(key)) {
-                collected.set(key, { ...lead, telefone: phone, _term: term, _loc: loc });
-              }
-            }
-          } catch (e) {
-            console.error(`Search failed for ${term} in ${loc}:`, e);
+    const tasks: Array<{ term: string; loc: string }> = [];
+    for (const term of terms) for (const loc of locations) tasks.push({ term, loc });
+
+    const runOne = async ({ term, loc }: { term: string; loc: string }) => {
+      try {
+        const { data, error } = await supabase.functions.invoke("extract-leads", {
+          body: {
+            query: term,
+            location: loc,
+            apiKey: apiKeyData.value,
+            provider: providerData?.value || "serpapi",
+            source: "google",
+            fastMode: isMultiQuery,
+          },
+        });
+        if (error) {
+          console.error("extract-leads error:", error);
+          return;
+        }
+        for (const lead of (data?.leads || [])) {
+          const phone = normalizePhone(lead.telefone || null);
+          const key = phone || `name:${(lead.nome_empresa || "").toLowerCase()}|${loc.toLowerCase()}`;
+          if (!collected.has(key)) {
+            collected.set(key, { ...lead, telefone: phone, _term: term, _loc: loc });
           }
         }
+      } catch (e) {
+        console.error(`Search failed for ${term} in ${loc}:`, e);
+      } finally {
+        doneQueries++;
+        setStatusText(`Buscando... (${doneQueries}/${totalQueries}) · ${collected.size} leads únicos`);
+        setProgress(Math.max(4, Math.round((doneQueries / totalQueries) * 30)));
       }
+    };
+
+    try {
+      // Run with bounded concurrency
+      let cursor = 0;
+      const workers = Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, async () => {
+        while (cursor < tasks.length) {
+          const idx = cursor++;
+          await runOne(tasks[idx]);
+        }
+      });
+      await Promise.all(workers);
+
 
       const allLeads = Array.from(collected.values());
       setProgress(35);

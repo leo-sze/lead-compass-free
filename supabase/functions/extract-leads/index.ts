@@ -700,7 +700,8 @@ Deno.serve(async (req) => {
       // ─── Google Maps Flow ─────────────────────────────────
       const searchQuery = `${query} em ${location}`;
       const allResults: any[] = [];
-      const maxPages = 4;
+      const maxPages = fastMode ? 2 : 4;
+      const targetCount = fastMode ? 30 : 60;
 
       if (provider === "serpapi") {
         for (let page = 0; page < maxPages; page++) {
@@ -709,7 +710,7 @@ Deno.serve(async (req) => {
           const results = await fetchSerpApi(searchQuery, apiKey, start, "google_maps");
           if (results.length === 0) break;
           allResults.push(...results);
-          if (allResults.length >= 60) break;
+          if (allResults.length >= targetCount) break;
         }
       } else {
         for (let page = 1; page <= maxPages; page++) {
@@ -717,7 +718,7 @@ Deno.serve(async (req) => {
           const results = await fetchSearchApi(searchQuery, apiKey, page, "google_maps");
           if (results.length === 0) break;
           allResults.push(...results);
-          if (allResults.length >= 60) break;
+          if (allResults.length >= targetCount) break;
         }
       }
 
@@ -732,28 +733,30 @@ Deno.serve(async (req) => {
           return true;
         });
 
-      // Fetch reviews
-      console.log(`Fetching reviews for qualifying leads...`);
-      const REVIEW_BATCH = 5;
-      for (let i = 0; i < leads.length; i += REVIEW_BATCH) {
-        const batch = leads.slice(i, i + REVIEW_BATCH);
-        const reviewPromises = batch.map((lead) => {
-          if (!lead.place_id || lead.total_reviews < 10 || (lead.rating || 0) < 3.5) {
-            return Promise.resolve([]);
+      // Skip reviews + CNPJ enrichment in fastMode (multi-query searches dedupe + enrich later)
+      let enrichedLeads = leads;
+      if (!fastMode) {
+        console.log(`Fetching reviews for qualifying leads...`);
+        const REVIEW_BATCH = 5;
+        for (let i = 0; i < leads.length; i += REVIEW_BATCH) {
+          const batch = leads.slice(i, i + REVIEW_BATCH);
+          const reviewPromises = batch.map((lead) => {
+            if (!lead.place_id || lead.total_reviews < 10 || (lead.rating || 0) < 3.5) {
+              return Promise.resolve([]);
+            }
+            return fetchPlaceReviews(lead.place_id, apiKey, provider);
+          });
+          const reviewResults = await Promise.all(reviewPromises);
+          for (let j = 0; j < batch.length; j++) {
+            leads[i + j].reviews = reviewResults[j];
           }
-          return fetchPlaceReviews(lead.place_id, apiKey, provider);
-        });
-        const reviewResults = await Promise.all(reviewPromises);
-        for (let j = 0; j < batch.length; j++) {
-          leads[i + j].reviews = reviewResults[j];
+        }
+
+        if (firecrawlKey && lovableKey) {
+          enrichedLeads = await lookupCnpjBatch(leads, firecrawlKey, lovableKey);
         }
       }
 
-      // CNPJ lookup
-      let enrichedLeads = leads;
-      if (firecrawlKey && lovableKey) {
-        enrichedLeads = await lookupCnpjBatch(leads, firecrawlKey, lovableKey);
-      }
 
       return new Response(
         JSON.stringify({ leads: enrichedLeads, total: enrichedLeads.length }),

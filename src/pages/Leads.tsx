@@ -239,16 +239,29 @@ const Leads = () => {
   );
 
   const recordDeletedLeads = async (items: Lead[]) => {
-    const rows = items
+    const rows = Array.from(new Map(items
       .map((lead) => ({
         telefone: normalizePhone(lead.telefone),
         nome_empresa: lead.nome_empresa,
         cnpj: lead.cnpj?.replace(/\D/g, "") || null,
       }))
-      .filter((row) => row.telefone || row.cnpj);
+      .filter((row) => row.telefone || row.cnpj)
+      .map((row) => [`${row.telefone || ""}|${row.cnpj || ""}`, row])).values());
 
     if (rows.length > 0) {
-      await supabase.from("deleted_leads").upsert(rows, { onConflict: "telefone", ignoreDuplicates: true });
+      const phones = rows.map((row) => row.telefone).filter(Boolean) as string[];
+      const cnpjs = rows.map((row) => row.cnpj).filter(Boolean) as string[];
+      const [{ data: existingPhones }, { data: existingCnpjs }] = await Promise.all([
+        phones.length > 0 ? supabase.from("deleted_leads").select("telefone").in("telefone", phones) : Promise.resolve({ data: [] as any[] }),
+        cnpjs.length > 0 ? supabase.from("deleted_leads").select("cnpj").in("cnpj", cnpjs) : Promise.resolve({ data: [] as any[] }),
+      ]);
+      const blockedPhones = new Set((existingPhones || []).map((row: any) => row.telefone));
+      const blockedCnpjs = new Set((existingCnpjs || []).map((row: any) => row.cnpj));
+      const toInsert = rows.filter((row) => !((row.telefone && blockedPhones.has(row.telefone)) || (row.cnpj && blockedCnpjs.has(row.cnpj))));
+      if (toInsert.length > 0) {
+        const { error } = await supabase.from("deleted_leads").insert(toInsert);
+        if (error) console.error("Failed to record deleted leads:", error);
+      }
     }
   };
 

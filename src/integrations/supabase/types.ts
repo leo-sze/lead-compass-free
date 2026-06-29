@@ -42,16 +42,24 @@ export type Database = {
         Row: {
           cidade: string | null
           cnpj: string | null
+          commercial_score: number | null
           created_at: string
           endereco: string | null
           fonte: string | null
+          google_owner_replied_recently: boolean | null
+          google_profile_complete: boolean | null
+          google_rating: number | null
+          google_review_count: number | null
           id: string
           instagram: string | null
+          instagram_last_post_days: number | null
+          instagram_profile_is_person: boolean | null
           justificativa: string | null
           lead_quality: string | null
           linkedin: string | null
           nome_decisor: string | null
           nome_empresa: string
+          phone_type: string | null
           query_origem: string | null
           score: number | null
           score_breakdown: Json | null
@@ -61,20 +69,29 @@ export type Database = {
           tags: string[] | null
           telefone: string | null
           termo_pesquisa: string | null
+          tier: string | null
         }
         Insert: {
           cidade?: string | null
           cnpj?: string | null
+          commercial_score?: number | null
           created_at?: string
           endereco?: string | null
           fonte?: string | null
+          google_owner_replied_recently?: boolean | null
+          google_profile_complete?: boolean | null
+          google_rating?: number | null
+          google_review_count?: number | null
           id?: string
           instagram?: string | null
+          instagram_last_post_days?: number | null
+          instagram_profile_is_person?: boolean | null
           justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
           nome_decisor?: string | null
           nome_empresa: string
+          phone_type?: string | null
           query_origem?: string | null
           score?: number | null
           score_breakdown?: Json | null
@@ -84,20 +101,29 @@ export type Database = {
           tags?: string[] | null
           telefone?: string | null
           termo_pesquisa?: string | null
+          tier?: string | null
         }
         Update: {
           cidade?: string | null
           cnpj?: string | null
+          commercial_score?: number | null
           created_at?: string
           endereco?: string | null
           fonte?: string | null
+          google_owner_replied_recently?: boolean | null
+          google_profile_complete?: boolean | null
+          google_rating?: number | null
+          google_review_count?: number | null
           id?: string
           instagram?: string | null
+          instagram_last_post_days?: number | null
+          instagram_profile_is_person?: boolean | null
           justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
           nome_decisor?: string | null
           nome_empresa?: string
+          phone_type?: string | null
           query_origem?: string | null
           score?: number | null
           score_breakdown?: Json | null
@@ -107,6 +133,7 @@ export type Database = {
           tags?: string[] | null
           telefone?: string | null
           termo_pesquisa?: string | null
+          tier?: string | null
         }
         Relationships: []
       }

@@ -745,11 +745,55 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── ESTÁGIO 5: Instagram deep scrape + Google Maps scrape (paralelo) ──
+    const finalSite = (updates.site as string) || site || null;
+    const finalIg = (updates.instagram as string) || instagram || null;
+    const finalTel = (updates.telefone as string) || telefone || null;
+    const finalEnd = (updates.endereco as string) || endereco || null;
+    const finalCid = (updates.cidade as string) || cidade || null;
+    const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
+
+    const [igData, gmapsData] = await Promise.all([
+      finalIg ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY) : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null }),
+      scrapeGoogleMaps(nome_empresa, finalCid, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+    ]);
+
+    if (igData.instagram_last_post_days != null) (updates as any).instagram_last_post_days = igData.instagram_last_post_days;
+    if (igData.instagram_profile_is_person != null) (updates as any).instagram_profile_is_person = igData.instagram_profile_is_person;
+    if (gmapsData.google_rating != null) (updates as any).google_rating = gmapsData.google_rating;
+    if (gmapsData.google_review_count != null) (updates as any).google_review_count = gmapsData.google_review_count;
+    if (gmapsData.google_owner_replied_recently != null) (updates as any).google_owner_replied_recently = gmapsData.google_owner_replied_recently;
+    if (gmapsData.google_profile_complete != null) (updates as any).google_profile_complete = gmapsData.google_profile_complete;
+
+    // ── Phone type ──
+    const phoneType = detectPhoneType(finalTel);
+    if (phoneType) (updates as any).phone_type = phoneType;
+
+    // ── Commercial score + tier ──
+    const { commercial_score, tier } = computeCommercialScore({
+      phone_type: phoneType,
+      nome_decisor: finalDec,
+      instagram_last_post_days: igData.instagram_last_post_days,
+      site: finalSite,
+      google_profile_complete: gmapsData.google_profile_complete,
+      google_review_count: gmapsData.google_review_count,
+      google_owner_replied_recently: gmapsData.google_owner_replied_recently,
+      google_rating: gmapsData.google_rating,
+      instagram_profile_is_person: igData.instagram_profile_is_person,
+      cnpj: (updates.cnpj as string) || cnpj || null,
+      endereco: finalEnd,
+      nome_empresa,
+    });
+    (updates as any).commercial_score = commercial_score;
+    (updates as any).tier = tier;
+
     return new Response(
       JSON.stringify({
         nome_decisor: updates.nome_decisor || nome_decisor || "Não identificado",
         cargo: "",
         decisor_fonte: decisorFonte,
+        commercial_score,
+        tier,
         updates,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -926,6 +926,8 @@ const Leads = () => {
                         />
                       </TableCell>
                       <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
+                      <TableCell><CommercialCell lead={lead} /></TableCell>
+                      <TableCell><SignalIcons lead={lead} /></TableCell>
                       <TableCell>
                         <QualityBadgeWithHover lead={lead} isScoring={isScoring} />
                       </TableCell>

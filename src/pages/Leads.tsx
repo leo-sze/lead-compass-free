@@ -889,7 +889,9 @@ const Leads = () => {
                   />
                 </TableHead>
                 <TableHead>Empresa</TableHead>
-                <TableHead>Score</TableHead>
+                <TableHead>Comercial</TableHead>
+                <TableHead>Sinais</TableHead>
+                <TableHead>Score IA</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>

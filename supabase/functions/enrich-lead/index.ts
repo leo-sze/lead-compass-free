@@ -356,6 +356,186 @@ async function aiFallbackDecisor(
   return null;
 }
 
+// ─── Phone type detection ───
+function detectPhoneType(phone: string | null): "celular" | "fixo" | null {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.length >= 12 && digits.startsWith("55")) digits = digits.slice(2);
+  if (digits.length === 11) return "celular";
+  if (digits.length === 10) return "fixo";
+  return null;
+}
+
+// ─── Instagram deep scrape ───
+interface InstagramScrapeResult {
+  instagram_last_post_days: number | null;
+  instagram_profile_is_person: boolean | null;
+}
+
+async function scrapeInstagram(
+  igUrl: string,
+  nome: string,
+  firecrawlKey: string,
+  lovableKey: string
+): Promise<InstagramScrapeResult> {
+  const md = await scrapeUrl(igUrl, firecrawlKey);
+  if (!md || md.length < 50) return { instagram_last_post_days: null, instagram_profile_is_person: null };
+
+  try {
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: `Você receberá o conteúdo bruto de um perfil de Instagram (${nome}). Analise e responda 2 perguntas: 1) Quantos dias se passaram desde o último post (com base em datas/relatos como "há 3 dias", "1 semana atrás", "Nov 2024"). Data atual: ${new Date().toISOString().slice(0,10)}. Se não conseguir inferir, retorne null. 2) A foto de perfil/identidade visual parece ser uma pessoa física real (rosto humano, nome pessoal, bio em primeira pessoa "eu sou...") ou um logo/produto/marca? Responda apenas true (pessoa) ou false (marca). Se inconclusivo, null.` },
+          { role: "user", content: md.slice(0, 6000) }
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "extract_ig",
+            parameters: {
+              type: "object",
+              properties: {
+                instagram_last_post_days: { type: "number", nullable: true },
+                instagram_profile_is_person: { type: "boolean", nullable: true },
+              },
+              required: ["instagram_last_post_days", "instagram_profile_is_person"],
+              additionalProperties: false,
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "extract_ig" } }
+      }),
+    });
+    if (!aiRes.ok) return { instagram_last_post_days: null, instagram_profile_is_person: null };
+    const data = await aiRes.json();
+    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
+    return {
+      instagram_last_post_days: typeof args.instagram_last_post_days === "number" ? Math.max(0, Math.round(args.instagram_last_post_days)) : null,
+      instagram_profile_is_person: typeof args.instagram_profile_is_person === "boolean" ? args.instagram_profile_is_person : null,
+    };
+  } catch (e) {
+    console.error("[IG] error:", e);
+    return { instagram_last_post_days: null, instagram_profile_is_person: null };
+  }
+}
+
+// ─── Google Maps scrape ───
+interface GoogleMapsResult {
+  google_rating: number | null;
+  google_review_count: number | null;
+  google_owner_replied_recently: boolean | null;
+  google_profile_complete: boolean | null;
+}
+
+async function scrapeGoogleMaps(
+  nome: string,
+  cidade: string | null,
+  firecrawlKey: string,
+  lovableKey: string
+): Promise<GoogleMapsResult> {
+  const q = `"${nome}" ${cidade ? `"${cidade}"` : ""} site:google.com/maps OR site:maps.google.com`;
+  const text = await searchWeb(q, firecrawlKey);
+  if (!text || text.length < 50) {
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+  }
+  try {
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: `Você receberá conteúdo extraído do perfil do Google Maps da empresa "${nome}"${cidade ? ` em ${cidade}` : ""}. Extraia: (1) nota média (1.0-5.0), (2) total de avaliações, (3) se há respostas do PROPRIETÁRIO ("Resposta do proprietário"/"Owner reply") em alguma das avaliações recentes mostradas (boolean), (4) se o perfil parece completo: tem foto, horário de funcionamento E descrição/categoria preenchidos (boolean). Use null se não conseguir determinar.` },
+          { role: "user", content: text.slice(0, 8000) }
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "extract_gmaps",
+            parameters: {
+              type: "object",
+              properties: {
+                google_rating: { type: "number", nullable: true },
+                google_review_count: { type: "number", nullable: true },
+                google_owner_replied_recently: { type: "boolean", nullable: true },
+                google_profile_complete: { type: "boolean", nullable: true },
+              },
+              required: ["google_rating","google_review_count","google_owner_replied_recently","google_profile_complete"],
+              additionalProperties: false,
+            }
+          }
+        }],
+        tool_choice: { type: "function", function: { name: "extract_gmaps" } }
+      }),
+    });
+    if (!aiRes.ok) return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    const data = await aiRes.json();
+    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
+    return {
+      google_rating: typeof args.google_rating === "number" ? Math.round(args.google_rating * 10) / 10 : null,
+      google_review_count: typeof args.google_review_count === "number" ? Math.round(args.google_review_count) : null,
+      google_owner_replied_recently: typeof args.google_owner_replied_recently === "boolean" ? args.google_owner_replied_recently : null,
+      google_profile_complete: typeof args.google_profile_complete === "boolean" ? args.google_profile_complete : null,
+    };
+  } catch (e) {
+    console.error("[GMaps] error:", e);
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+  }
+}
+
+// ─── Commercial score (0-10) + tier ───
+const CHAIN_REGEX = /\b(smartfit|smart\s?fit|bodytech|bluefit|formula|f[oó]rmula|bio\s?ritmo|franquia|grupo|rede\s|holding)\b/i;
+
+function computeCommercialScore(lead: {
+  phone_type?: string | null;
+  nome_decisor?: string | null;
+  instagram_last_post_days?: number | null;
+  site?: string | null;
+  google_profile_complete?: boolean | null;
+  google_review_count?: number | null;
+  google_owner_replied_recently?: boolean | null;
+  google_rating?: number | null;
+  instagram_profile_is_person?: boolean | null;
+  cnpj?: string | null;
+  endereco?: string | null;
+  nome_empresa?: string;
+}): { commercial_score: number; tier: "A" | "B" | "C" } {
+  let s = 0;
+
+  // Acesso ao decisor
+  if (lead.phone_type === "celular") s += 5;
+  if (lead.nome_decisor) s += 2;
+  if (lead.phone_type === "fixo" && !lead.nome_decisor) s -= 2;
+
+  // Presença digital
+  if (typeof lead.instagram_last_post_days === "number") {
+    if (lead.instagram_last_post_days <= 7) s += 2;
+    else if (lead.instagram_last_post_days <= 30) s += 1;
+  }
+  if (lead.site) s += 2;
+  if (lead.google_profile_complete === true) s += 1;
+  if (typeof lead.google_review_count === "number" && lead.google_review_count >= 10) s += 1;
+
+  // Engajamento
+  if (lead.google_owner_replied_recently === true) s += 2;
+  if (typeof lead.google_rating === "number" && lead.google_rating >= 4.5) s += 1;
+  if (lead.instagram_profile_is_person === true) s += 1;
+
+  // Perfil do negócio
+  if (lead.cnpj) s += 2;
+  if (lead.endereco) s += 1;
+  if (lead.nome_empresa && CHAIN_REGEX.test(lead.nome_empresa)) s -= 2;
+  if (!lead.cnpj) s -= 1;
+
+  s = Math.max(0, Math.min(20, s));
+  const commercial_score = Math.round((s / 2) * 10) / 10;
+  const tier: "A" | "B" | "C" = commercial_score >= 8 ? "A" : commercial_score >= 5 ? "B" : "C";
+  return { commercial_score, tier };
+}
+
 // ─── Busca de campos gerais (site, instagram, linkedin, telefone, endereco) via IA ───
 async function enrichGeneralFields(
   nome: string, cidade: string | null,

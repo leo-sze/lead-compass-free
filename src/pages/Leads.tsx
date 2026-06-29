@@ -107,6 +107,58 @@ const QualityBadgeWithHover = ({ lead, isScoring }: { lead: Lead; isScoring?: bo
   );
 };
 
+const tierConfig: Record<string, { label: string; className: string; cta: string }> = {
+  A: { label: "Tier A", className: "bg-green-500/15 text-green-400 border-green-500/40", cta: "Ligar agora" },
+  B: { label: "Tier B", className: "bg-yellow-500/15 text-yellow-400 border-yellow-500/40", cta: "WhatsApp primeiro" },
+  C: { label: "Tier C", className: "bg-red-500/15 text-red-400 border-red-500/40", cta: "Enriquecer mais" },
+};
+
+const CommercialCell = ({ lead }: { lead: any }) => {
+  const tier = lead.tier as "A" | "B" | "C" | null;
+  const score = lead.commercial_score as number | null;
+  if (!tier && score == null) return <span className="text-xs text-muted-foreground">—</span>;
+  const c = tier ? tierConfig[tier] : null;
+  return (
+    <div className="flex flex-col gap-1 min-w-[110px]">
+      {c && (
+        <Badge variant="outline" className={`${c.className} text-xs font-semibold w-fit`} title={c.cta}>
+          {c.label}
+        </Badge>
+      )}
+      {score != null && (
+        <span className="text-base font-bold tabular-nums">
+          {score.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">/ 10</span>
+        </span>
+      )}
+      {c && <span className="text-[10px] text-muted-foreground leading-tight">{c.cta}</span>}
+    </div>
+  );
+};
+
+const SignalIcons = ({ lead }: { lead: any }) => {
+  const igDays = lead.instagram_last_post_days as number | null;
+  const rating = lead.google_rating as number | null;
+  const reviews = lead.google_review_count as number | null;
+  const isPerson = lead.instagram_profile_is_person as boolean | null;
+  const ownerReplies = lead.google_owner_replied_recently as boolean | null;
+  return (
+    <div className="flex flex-col gap-0.5 text-[11px]">
+      {igDays != null && (
+        <span className={igDays <= 7 ? "text-pink-400" : igDays <= 30 ? "text-pink-300/70" : "text-muted-foreground"} title="Último post Instagram">
+          📸 {igDays === 0 ? "hoje" : igDays > 30 ? "+30 dias" : `${igDays} dias`}
+        </span>
+      )}
+      {rating != null && (
+        <span className="text-yellow-400" title="Avaliação Google">
+          ⭐ {rating.toFixed(1)}{reviews != null ? ` (${reviews})` : ""}
+        </span>
+      )}
+      {isPerson === true && <span className="text-blue-400" title="Perfil pessoal no IG">👤 Perfil pessoal</span>}
+      {ownerReplies === true && <span className="text-green-400" title="Dono responde reviews">💬 Dono responde</span>}
+    </div>
+  );
+};
+
 type KommoStatus = "success" | "error" | "duplicate";
 
 const Leads = () => {

@@ -119,29 +119,50 @@ const CommercialCell = ({ lead }: { lead: any }) => {
   if (!tier && score == null) return <span className="text-xs text-muted-foreground">—</span>;
   const c = tier ? tierConfig[tier] : null;
 
-  // Reconstrói o breakdown da nota comercial (mesma lógica da edge function)
-  const rows: { label: string; pts: number; ok: boolean }[] = [];
-  const add = (cond: boolean, pts: number, label: string) => {
-    if (cond) rows.push({ label, pts, ok: pts >= 0 });
-  };
-  add(lead.phone_type === "celular", 5, "Telefone celular");
-  add(!!lead.nome_decisor, 2, "Decisor identificado");
-  add(lead.phone_type === "fixo" && !lead.nome_decisor, -2, "Fixo sem decisor");
-  if (typeof lead.instagram_last_post_days === "number") {
-    if (lead.instagram_last_post_days <= 7) add(true, 2, "Instagram ativo (≤7d)");
-    else if (lead.instagram_last_post_days <= 30) add(true, 1, "Instagram ativo (≤30d)");
-  }
-  add(!!lead.site, 2, "Tem site");
-  add(lead.google_profile_complete === true, 1, "Perfil Google completo");
-  add(typeof lead.google_review_count === "number" && lead.google_review_count >= 10, 1, "10+ avaliações Google");
-  add(lead.google_owner_replied_recently === true, 2, "Dono responde reviews");
-  add(typeof lead.google_rating === "number" && lead.google_rating >= 4.5, 1, "Nota Google ≥ 4.5");
-  add(lead.instagram_profile_is_person === true, 1, "Perfil pessoal no Instagram");
-  add(!!lead.cnpj, 2, "CNPJ encontrado");
-  add(!!lead.endereco, 1, "Endereço completo");
+  // Reconstrói o breakdown completo da nota (mesma lógica da edge function)
+  // Mostra TODOS os critérios — aplicados (com pontos) e não-aplicados (em cinza)
   const CHAIN_REGEX = /\b(smartfit|smart\s?fit|bodytech|bluefit|formula|f[oó]rmula|bio\s?ritmo|franquia|grupo|rede\s|holding)\b/i;
-  add(!!lead.nome_empresa && CHAIN_REGEX.test(lead.nome_empresa), -2, "Rede/franquia (penalidade)");
-  add(!lead.cnpj, -1, "Sem CNPJ");
+  const igDays = typeof lead.instagram_last_post_days === "number" ? lead.instagram_last_post_days : null;
+  const isChain = !!lead.nome_empresa && CHAIN_REGEX.test(lead.nome_empresa);
+
+  type Row = { label: string; max: number; earned: number; applied: boolean };
+  const groups: { title: string; rows: Row[] }[] = [
+    {
+      title: "Acesso ao decisor",
+      rows: [
+        { label: "Telefone celular", max: 5, earned: lead.phone_type === "celular" ? 5 : 0, applied: lead.phone_type === "celular" },
+        { label: "Decisor identificado", max: 2, earned: lead.nome_decisor ? 2 : 0, applied: !!lead.nome_decisor },
+        { label: "Fixo sem decisor (penalidade)", max: -2, earned: lead.phone_type === "fixo" && !lead.nome_decisor ? -2 : 0, applied: lead.phone_type === "fixo" && !lead.nome_decisor },
+      ],
+    },
+    {
+      title: "Presença digital",
+      rows: [
+        { label: "Instagram ativo (≤7d)", max: 2, earned: igDays !== null && igDays <= 7 ? 2 : 0, applied: igDays !== null && igDays <= 7 },
+        { label: "Instagram ativo (8–30d)", max: 1, earned: igDays !== null && igDays > 7 && igDays <= 30 ? 1 : 0, applied: igDays !== null && igDays > 7 && igDays <= 30 },
+        { label: "Tem site", max: 2, earned: lead.site ? 2 : 0, applied: !!lead.site },
+        { label: "Perfil Google completo", max: 1, earned: lead.google_profile_complete === true ? 1 : 0, applied: lead.google_profile_complete === true },
+        { label: "10+ avaliações Google", max: 1, earned: typeof lead.google_review_count === "number" && lead.google_review_count >= 10 ? 1 : 0, applied: typeof lead.google_review_count === "number" && lead.google_review_count >= 10 },
+      ],
+    },
+    {
+      title: "Engajamento",
+      rows: [
+        { label: "Dono responde reviews", max: 2, earned: lead.google_owner_replied_recently === true ? 2 : 0, applied: lead.google_owner_replied_recently === true },
+        { label: "Nota Google ≥ 4.5", max: 1, earned: typeof lead.google_rating === "number" && lead.google_rating >= 4.5 ? 1 : 0, applied: typeof lead.google_rating === "number" && lead.google_rating >= 4.5 },
+        { label: "Perfil pessoal no Instagram", max: 1, earned: lead.instagram_profile_is_person === true ? 1 : 0, applied: lead.instagram_profile_is_person === true },
+      ],
+    },
+    {
+      title: "Perfil do negócio",
+      rows: [
+        { label: "CNPJ encontrado", max: 2, earned: lead.cnpj ? 2 : 0, applied: !!lead.cnpj },
+        { label: "Endereço completo", max: 1, earned: lead.endereco ? 1 : 0, applied: !!lead.endereco },
+        { label: "Rede/franquia (penalidade)", max: -2, earned: isChain ? -2 : 0, applied: isChain },
+        { label: "Sem CNPJ (penalidade)", max: -1, earned: !lead.cnpj ? -1 : 0, applied: !lead.cnpj },
+      ],
+    },
+  ];
 
   const cell = (
     <div className="flex flex-col gap-1 min-w-[110px] cursor-help">
@@ -164,7 +185,7 @@ const CommercialCell = ({ lead }: { lead: any }) => {
       <HoverCardTrigger asChild>
         <span className="inline-flex">{cell}</span>
       </HoverCardTrigger>
-      <HoverCardContent className="w-80 p-4" side="right">
+      <HoverCardContent className="w-96 p-4 max-h-[80vh] overflow-y-auto" side="right">
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm font-semibold">
             {c?.label ?? "Sem tier"} — {score != null ? `${score.toFixed(1)}/10` : "—"}
@@ -178,21 +199,34 @@ const CommercialCell = ({ lead }: { lead: any }) => {
             {tier === "C" && "Faltam dados — enriqueça antes de abordar para evitar desperdício."}
           </p>
         )}
-        {rows.length > 0 ? (
-          <div className="space-y-1">
-            <p className="text-xs font-medium mb-1">Composição da nota</p>
-            {rows.map((r, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{r.ok ? "✅" : "⚠️"} {r.label}</span>
-                <span className={`font-mono font-semibold ${r.ok ? "text-green-400" : "text-red-400"}`}>
-                  {r.pts > 0 ? `+${r.pts}` : r.pts}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">Sem dados suficientes para detalhar a nota. Enriqueça o lead para ver a composição.</p>
-        )}
+        <div className="space-y-3">
+          <p className="text-xs font-medium">Composição da nota (todos os critérios)</p>
+          {groups.map((g, gi) => (
+            <div key={gi} className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</p>
+              {g.rows.map((r, i) => {
+                const isPenalty = r.max < 0;
+                const icon = r.applied ? (isPenalty ? "⚠️" : "✅") : "⚪";
+                const ptsColor = !r.applied
+                  ? "text-muted-foreground/60"
+                  : isPenalty
+                  ? "text-red-400"
+                  : "text-green-400";
+                const labelColor = r.applied ? "" : "text-muted-foreground/60 line-through";
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className={labelColor}>{icon} {r.label}</span>
+                    <span className={`font-mono font-semibold ${ptsColor}`}>
+                      {r.applied
+                        ? (r.earned > 0 ? `+${r.earned}` : `${r.earned}`)
+                        : `0 / ${r.max > 0 ? `+${r.max}` : r.max}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
         <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border">
           Soma bruta clampada em 0–20 e dividida por 2. Tier A ≥ 8 · B ≥ 5 · C &lt; 5.
         </p>

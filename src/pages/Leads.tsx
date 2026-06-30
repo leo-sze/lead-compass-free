@@ -185,7 +185,7 @@ const CommercialCell = ({ lead }: { lead: any }) => {
       <HoverCardTrigger asChild>
         <span className="inline-flex">{cell}</span>
       </HoverCardTrigger>
-      <HoverCardContent className="w-80 p-4" side="right">
+      <HoverCardContent className="w-96 p-4 max-h-[80vh] overflow-y-auto" side="right">
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm font-semibold">
             {c?.label ?? "Sem tier"} — {score != null ? `${score.toFixed(1)}/10` : "—"}
@@ -199,21 +199,34 @@ const CommercialCell = ({ lead }: { lead: any }) => {
             {tier === "C" && "Faltam dados — enriqueça antes de abordar para evitar desperdício."}
           </p>
         )}
-        {rows.length > 0 ? (
-          <div className="space-y-1">
-            <p className="text-xs font-medium mb-1">Composição da nota</p>
-            {rows.map((r, i) => (
-              <div key={i} className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{r.ok ? "✅" : "⚠️"} {r.label}</span>
-                <span className={`font-mono font-semibold ${r.ok ? "text-green-400" : "text-red-400"}`}>
-                  {r.pts > 0 ? `+${r.pts}` : r.pts}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">Sem dados suficientes para detalhar a nota. Enriqueça o lead para ver a composição.</p>
-        )}
+        <div className="space-y-3">
+          <p className="text-xs font-medium">Composição da nota (todos os critérios)</p>
+          {groups.map((g, gi) => (
+            <div key={gi} className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{g.title}</p>
+              {g.rows.map((r, i) => {
+                const isPenalty = r.max < 0;
+                const icon = r.applied ? (isPenalty ? "⚠️" : "✅") : "⚪";
+                const ptsColor = !r.applied
+                  ? "text-muted-foreground/60"
+                  : isPenalty
+                  ? "text-red-400"
+                  : "text-green-400";
+                const labelColor = r.applied ? "" : "text-muted-foreground/60 line-through";
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className={labelColor}>{icon} {r.label}</span>
+                    <span className={`font-mono font-semibold ${ptsColor}`}>
+                      {r.applied
+                        ? (r.earned > 0 ? `+${r.earned}` : `${r.earned}`)
+                        : `0 / ${r.max > 0 ? `+${r.max}` : r.max}`}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
         <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border">
           Soma bruta clampada em 0–20 e dividida por 2. Tier A ≥ 8 · B ≥ 5 · C &lt; 5.
         </p>

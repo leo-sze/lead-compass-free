@@ -118,10 +118,35 @@ const CommercialCell = ({ lead }: { lead: any }) => {
   const score = lead.commercial_score as number | null;
   if (!tier && score == null) return <span className="text-xs text-muted-foreground">—</span>;
   const c = tier ? tierConfig[tier] : null;
-  return (
-    <div className="flex flex-col gap-1 min-w-[110px]">
+
+  // Reconstrói o breakdown da nota comercial (mesma lógica da edge function)
+  const rows: { label: string; pts: number; ok: boolean }[] = [];
+  const add = (cond: boolean, pts: number, label: string) => {
+    if (cond) rows.push({ label, pts, ok: pts >= 0 });
+  };
+  add(lead.phone_type === "celular", 5, "Telefone celular");
+  add(!!lead.nome_decisor, 2, "Decisor identificado");
+  add(lead.phone_type === "fixo" && !lead.nome_decisor, -2, "Fixo sem decisor");
+  if (typeof lead.instagram_last_post_days === "number") {
+    if (lead.instagram_last_post_days <= 7) add(true, 2, "Instagram ativo (≤7d)");
+    else if (lead.instagram_last_post_days <= 30) add(true, 1, "Instagram ativo (≤30d)");
+  }
+  add(!!lead.site, 2, "Tem site");
+  add(lead.google_profile_complete === true, 1, "Perfil Google completo");
+  add(typeof lead.google_review_count === "number" && lead.google_review_count >= 10, 1, "10+ avaliações Google");
+  add(lead.google_owner_replied_recently === true, 2, "Dono responde reviews");
+  add(typeof lead.google_rating === "number" && lead.google_rating >= 4.5, 1, "Nota Google ≥ 4.5");
+  add(lead.instagram_profile_is_person === true, 1, "Perfil pessoal no Instagram");
+  add(!!lead.cnpj, 2, "CNPJ encontrado");
+  add(!!lead.endereco, 1, "Endereço completo");
+  const CHAIN_REGEX = /\b(smartfit|smart\s?fit|bodytech|bluefit|formula|f[oó]rmula|bio\s?ritmo|franquia|grupo|rede\s|holding)\b/i;
+  add(!!lead.nome_empresa && CHAIN_REGEX.test(lead.nome_empresa), -2, "Rede/franquia (penalidade)");
+  add(!lead.cnpj, -1, "Sem CNPJ");
+
+  const cell = (
+    <div className="flex flex-col gap-1 min-w-[110px] cursor-help">
       {c && (
-        <Badge variant="outline" className={`${c.className} text-xs font-semibold w-fit`} title={c.cta}>
+        <Badge variant="outline" className={`${c.className} text-xs font-semibold w-fit`}>
           {c.label}
         </Badge>
       )}
@@ -133,7 +158,49 @@ const CommercialCell = ({ lead }: { lead: any }) => {
       {c && <span className="text-[10px] text-muted-foreground leading-tight">{c.cta}</span>}
     </div>
   );
+
+  return (
+    <HoverCard openDelay={150}>
+      <HoverCardTrigger asChild>
+        <span className="inline-flex">{cell}</span>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-80 p-4" side="right">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-semibold">
+            {c?.label ?? "Sem tier"} — {score != null ? `${score.toFixed(1)}/10` : "—"}
+          </p>
+        </div>
+        {c && (
+          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+            <strong>Ação recomendada:</strong> {c.cta}.{" "}
+            {tier === "A" && "Lead com alta probabilidade de conversão — priorize ligação imediata."}
+            {tier === "B" && "Bom potencial, mas vale começar por WhatsApp para qualificar."}
+            {tier === "C" && "Faltam dados — enriqueça antes de abordar para evitar desperdício."}
+          </p>
+        )}
+        {rows.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium mb-1">Composição da nota</p>
+            {rows.map((r, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">{r.ok ? "✅" : "⚠️"} {r.label}</span>
+                <span className={`font-mono font-semibold ${r.ok ? "text-green-400" : "text-red-400"}`}>
+                  {r.pts > 0 ? `+${r.pts}` : r.pts}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Sem dados suficientes para detalhar a nota. Enriqueça o lead para ver a composição.</p>
+        )}
+        <p className="text-[10px] text-muted-foreground mt-3 pt-2 border-t border-border">
+          Soma bruta clampada em 0–20 e dividida por 2. Tier A ≥ 8 · B ≥ 5 · C &lt; 5.
+        </p>
+      </HoverCardContent>
+    </HoverCard>
+  );
 };
+
 
 const SignalIcons = ({ lead }: { lead: any }) => {
   const igDays = lead.instagram_last_post_days as number | null;

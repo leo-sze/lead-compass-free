@@ -83,52 +83,75 @@ function extractCnpjFromText(text: string): string | null {
   return null;
 }
 
+// Extrai o logradouro (rua/av) do campo endereço — tudo antes da primeira vírgula ou número
+function extractLogradouro(endereco: string | null): string | null {
+  if (!endereco) return null;
+  const clean = endereco.trim();
+  if (!clean) return null;
+  let head = clean.split(",")[0].trim();
+  const numMatch = head.match(/^(.*?)\s+\d/);
+  if (numMatch && numMatch[1].trim().length >= 4) {
+    head = numMatch[1].trim();
+  }
+  return head.length >= 4 ? head : null;
+}
+
 async function findCnpj(
   nome: string,
   cidade: string | null,
   telefone: string | null,
+  endereco: string | null,
   firecrawlKey: string
 ): Promise<string | null> {
   const locationQ = cidade ? ` "${cidade}"` : "";
+  const logradouro = extractLogradouro(endereco);
+  const tel = telefone?.trim() || null;
 
-  // Estratégia 1: busca genérica
-  const text1 = await searchWeb(`"${nome}"${locationQ} CNPJ`, firecrawlKey);
-  const m1 = extractCnpjFromText(text1);
-  if (m1) {
-    console.log(`[CNPJ] Encontrado: ${m1} via busca genérica`);
-    return m1;
-  }
+  // Todas as estratégias rodam em paralelo. A ordem do array define a prioridade
+  // caso mais de uma retorne um CNPJ válido.
+  const strategies: Array<{ label: string; run: () => Promise<string | null> }> = [
+    {
+      label: "casadosdados+cidade",
+      run: async () => extractCnpjFromText(await searchWeb(`"${nome}"${locationQ} site:casadosdados.com.br`, firecrawlKey)),
+    },
+    {
+      label: "casadosdados+logradouro",
+      run: async () => logradouro
+        ? extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${logradouro}"${locationQ}`, firecrawlKey))
+        : null,
+    },
+    {
+      label: "nome+logradouro+CNPJ",
+      run: async () => logradouro
+        ? extractCnpjFromText(await searchWeb(`"${nome}" "${logradouro}" CNPJ`, firecrawlKey))
+        : null,
+    },
+    {
+      label: "busca genérica",
+      run: async () => extractCnpjFromText(await searchWeb(`"${nome}"${locationQ} CNPJ`, firecrawlKey)),
+    },
+    {
+      label: "casadosdados só-nome",
+      run: async () => extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${nome}"`, firecrawlKey)),
+    },
+    {
+      label: "telefone+CNPJ",
+      run: async () => tel ? extractCnpjFromText(await searchWeb(`"${tel}" CNPJ`, firecrawlKey)) : null,
+    },
+    {
+      label: "telefone+casadosdados",
+      run: async () => tel ? extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${tel}"`, firecrawlKey)) : null,
+    },
+  ];
 
-  // Estratégia 2: casa dos dados com cidade
-  const text2 = await searchWeb(`"${nome}"${locationQ} site:casadosdados.com.br`, firecrawlKey);
-  const m2 = extractCnpjFromText(text2);
-  if (m2) {
-    console.log(`[CNPJ] Encontrado: ${m2} via casadosdados+cidade`);
-    return m2;
-  }
+  const results = await Promise.all(strategies.map(s =>
+    s.run().catch(e => { console.error(`[CNPJ] Erro em ${s.label}:`, e); return null; })
+  ));
 
-  // Estratégia 3: casa dos dados apenas por nome (sem cidade, sem "CNPJ")
-  const text3 = await searchWeb(`site:casadosdados.com.br "${nome}"`, firecrawlKey);
-  const m3 = extractCnpjFromText(text3);
-  if (m3) {
-    console.log(`[CNPJ] Encontrado: ${m3} via casadosdados só-nome`);
-    return m3;
-  }
-
-  // Estratégia 4: busca pelo telefone
-  if (telefone && telefone.trim()) {
-    const tel = telefone.trim();
-    const text4a = await searchWeb(`"${tel}" CNPJ`, firecrawlKey);
-    const m4a = extractCnpjFromText(text4a);
-    if (m4a) {
-      console.log(`[CNPJ] Encontrado: ${m4a} via telefone+CNPJ`);
-      return m4a;
-    }
-    const text4b = await searchWeb(`site:casadosdados.com.br "${tel}"`, firecrawlKey);
-    const m4b = extractCnpjFromText(text4b);
-    if (m4b) {
-      console.log(`[CNPJ] Encontrado: ${m4b} via telefone+casadosdados`);
-      return m4b;
+  for (let i = 0; i < results.length; i++) {
+    if (results[i]) {
+      console.log(`[CNPJ] Encontrado: ${results[i]} via ${strategies[i].label}`);
+      return results[i]!;
     }
   }
 

@@ -33,8 +33,15 @@ interface LeadFiltersProps {
   onHasDecisorChange: (value: boolean) => void;
   noDecisor: boolean;
   onNoDecisorChange: (value: boolean) => void;
+  kommoImported: boolean;
+  onKommoImportedChange: (value: boolean) => void;
+  kommoNotImported: boolean;
+  onKommoNotImportedChange: (value: boolean) => void;
   dateFrom: Date | undefined;
   onDateFromChange: (value: Date | undefined) => void;
+  dateTo: Date | undefined;
+  onDateToChange: (value: Date | undefined) => void;
+}
   dateTo: Date | undefined;
   onDateToChange: (value: Date | undefined) => void;
 }

@@ -383,6 +383,7 @@ const Leads = () => {
     if (selectedCidade !== "all") result = result.filter((l) => l.cidade === selectedCidade);
     if (selectedFonte !== "all") result = result.filter((l) => l.fonte === selectedFonte);
     if (hasPhone) result = result.filter((l) => l.telefone);
+    if (noPhone) result = result.filter((l) => !l.telefone || !String(l.telefone).trim());
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);

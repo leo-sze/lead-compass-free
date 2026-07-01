@@ -768,26 +768,30 @@ Deno.serve(async (req) => {
       FIRECRAWL_API_KEY, LOVABLE_API_KEY
     );
 
-    // ── ESTÁGIO 1: CNPJ ──
+    // ── ESTÁGIO 1: CNPJ (timeout 8s) ──
     let foundCnpj = cnpj || null;
     if (!foundCnpj) {
-      foundCnpj = await findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY);
+      foundCnpj = await withTimeout(
+        findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY),
+        STAGE_TIMEOUT_MS,
+        "findCnpj",
+      );
     }
     if (foundCnpj) {
       updates.cnpj = foundCnpj;
     }
 
-    // ── ESTÁGIO 2: B2BLeads (fonte primária) ──
+    // ── ESTÁGIO 2: B2BLeads + BrasilAPI QSA em paralelo (timeout 8s cada) ──
     let decisorFound = false;
     let decisorFonte: string | null = null;
     if (foundCnpj) {
-      const b2bData = await scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
+      const [b2bData, brasilData] = await Promise.all([
+        withTimeout(scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "b2bleads"),
+        withTimeout(queryBrasilApi(foundCnpj), STAGE_TIMEOUT_MS, "brasilapi"),
+      ]);
+
+      // B2BLeads sempre preenche campos gerais quando disponíveis
       if (b2bData) {
-        if (needsDecisor && b2bData.nome_decisor) {
-          updates.nome_decisor = b2bData.nome_decisor;
-          decisorFound = true;
-          decisorFonte = "b2bleads";
-        }
         if (!telefone && b2bData.telefone) updates.telefone = b2bData.telefone;
         if (!endereco && b2bData.endereco) updates.endereco = b2bData.endereco;
         if (!cidade && b2bData.cidade) updates.cidade = b2bData.cidade;
@@ -795,23 +799,13 @@ Deno.serve(async (req) => {
         if (!instagram && b2bData.instagram) updates.instagram = b2bData.instagram;
         if (!linkedin && b2bData.linkedin) updates.linkedin = b2bData.linkedin;
       }
-    }
 
-    // ── ESTÁGIO 3: BrasilAPI fallback (se b2bleads não achou decisor) ──
-    if (foundCnpj && needsDecisor && !decisorFound) {
-      const brasilData = await queryBrasilApi(foundCnpj);
+      // BrasilAPI complementa campos gerais quando ativa
+      let brasilQsaDecisor: string | null = null;
       if (brasilData) {
         const situacao = String(brasilData.situacao_cadastral ?? "").toUpperCase();
         if (situacao !== "BAIXADA" && situacao !== "INAPTA") {
-          if (brasilData.qsa?.length) {
-            const decisor = selectDecisor(brasilData.qsa);
-            if (decisor) {
-              updates.nome_decisor = decisor;
-              decisorFound = true;
-              decisorFonte = "brasilapi_qsa";
-              console.log(`[QSA] Decisor selecionado: ${decisor} (fonte: brasilapi_qsa)`);
-            }
-          }
+          if (brasilData.qsa?.length) brasilQsaDecisor = selectDecisor(brasilData.qsa);
           if (!telefone && !updates.telefone && brasilData.telefone?.trim()) {
             updates.telefone = brasilData.telefone.trim();
           }
@@ -824,24 +818,75 @@ Deno.serve(async (req) => {
           }
         }
       }
-    }
 
-    // ── ESTÁGIO 4: Fallback IA (só se decisor ainda vazio) ──
-    if (needsDecisor && !decisorFound) {
-      const aiDecisor = await aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
-      if (aiDecisor) {
-        updates.nome_decisor = aiDecisor;
-        decisorFonte = "ia_fallback";
+      // Prioridade do decisor: B2BLeads > BrasilAPI
+      if (needsDecisor) {
+        if (b2bData?.nome_decisor) {
+          updates.nome_decisor = b2bData.nome_decisor;
+          decisorFound = true;
+          decisorFonte = "b2bleads";
+        } else if (brasilQsaDecisor) {
+          updates.nome_decisor = brasilQsaDecisor;
+          decisorFound = true;
+          decisorFonte = "brasilapi_qsa";
+          console.log(`[QSA] Decisor selecionado: ${brasilQsaDecisor}`);
+        }
       }
     }
 
-    // Merge general fields (don't overwrite what B2BLeads/BrasilAPI already filled)
+    // Merge campos gerais primeiro (para termos Instagram atualizado antes do próximo estágio)
     const generalUpdates = await generalPromise;
     for (const [key, val] of Object.entries(generalUpdates)) {
       if (!updates[key]) {
         updates[key] = val;
       }
     }
+
+    // ── ESTÁGIO 3: Instagram bio (se decisor ainda vazio) ──
+    if (needsDecisor && !decisorFound) {
+      const igUrl = (updates.instagram as string) || instagram || null;
+      if (igUrl) {
+        const igDecisor = await withTimeout(
+          decisorFromInstagram(igUrl, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+          STAGE_TIMEOUT_MS,
+          "IG-bio",
+        );
+        if (igDecisor) {
+          updates.nome_decisor = igDecisor;
+          decisorFound = true;
+          decisorFonte = "instagram_bio";
+        }
+      }
+    }
+
+    // ── ESTÁGIO 4: Google reviews (se decisor ainda vazio) ──
+    if (needsDecisor && !decisorFound) {
+      const revDecisor = await withTimeout(
+        decisorFromGoogleReviews(nome_empresa, (updates.cidade as string) || cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+        STAGE_TIMEOUT_MS,
+        "GReviews",
+      );
+      if (revDecisor) {
+        updates.nome_decisor = revDecisor;
+        decisorFound = true;
+        decisorFonte = "google_reviews";
+      }
+    }
+
+    // ── ESTÁGIO 5: Fallback IA (último recurso) ──
+    if (needsDecisor && !decisorFound) {
+      const aiDecisor = await withTimeout(
+        aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+        STAGE_TIMEOUT_MS,
+        "ia_fallback",
+      );
+      if (aiDecisor) {
+        updates.nome_decisor = aiDecisor;
+        decisorFonte = "ia_fallback";
+      }
+    }
+
+
 
     // ── ESTÁGIO 5: Instagram deep scrape + Google Maps scrape (paralelo) ──
     const finalSite = (updates.site as string) || site || null;

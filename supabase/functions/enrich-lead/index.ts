@@ -96,28 +96,38 @@ function extractLogradouro(endereco: string | null): string | null {
   return head.length >= 4 ? head : null;
 }
 
+// Timeout wrapper: resolves to null if the promise takes longer than `ms`
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      console.log(`[timeout] ${label} > ${ms}ms — pulando`);
+      resolve(null);
+    }, ms);
+    p.then((v) => { clearTimeout(t); resolve(v); })
+     .catch((e) => { clearTimeout(t); console.error(`[${label}] erro:`, e); resolve(null); });
+  });
+}
+
+const STAGE_TIMEOUT_MS = 8000;
+
 async function findCnpj(
   nome: string,
   cidade: string | null,
-  telefone: string | null,
+  _telefone: string | null,
   endereco: string | null,
   firecrawlKey: string
 ): Promise<string | null> {
-  const locationQ = cidade ? ` "${cidade}"` : "";
   const logradouro = extractLogradouro(endereco);
-  const tel = telefone?.trim() || null;
 
-  // Todas as estratégias rodam em paralelo. A ordem do array define a prioridade
-  // caso mais de uma retorne um CNPJ válido.
   const strategies: Array<{ label: string; run: () => Promise<string | null> }> = [
     {
-      label: "casadosdados+cidade",
-      run: async () => extractCnpjFromText(await searchWeb(`"${nome}"${locationQ} site:casadosdados.com.br`, firecrawlKey)),
+      label: "nome+CNPJ",
+      run: async () => extractCnpjFromText(await searchWeb(`"${nome}" CNPJ`, firecrawlKey)),
     },
     {
-      label: "casadosdados+logradouro",
-      run: async () => logradouro
-        ? extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${logradouro}"${locationQ}`, firecrawlKey))
+      label: "nome+cidade+CNPJ",
+      run: async () => cidade
+        ? extractCnpjFromText(await searchWeb(`"${nome}" "${cidade}" CNPJ`, firecrawlKey))
         : null,
     },
     {
@@ -125,22 +135,6 @@ async function findCnpj(
       run: async () => logradouro
         ? extractCnpjFromText(await searchWeb(`"${nome}" "${logradouro}" CNPJ`, firecrawlKey))
         : null,
-    },
-    {
-      label: "busca genérica",
-      run: async () => extractCnpjFromText(await searchWeb(`"${nome}"${locationQ} CNPJ`, firecrawlKey)),
-    },
-    {
-      label: "casadosdados só-nome",
-      run: async () => extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${nome}"`, firecrawlKey)),
-    },
-    {
-      label: "telefone+CNPJ",
-      run: async () => tel ? extractCnpjFromText(await searchWeb(`"${tel}" CNPJ`, firecrawlKey)) : null,
-    },
-    {
-      label: "telefone+casadosdados",
-      run: async () => tel ? extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${tel}"`, firecrawlKey)) : null,
     },
   ];
 
@@ -299,9 +293,15 @@ function toTitleCase(name: string): string {
 
 function selectDecisor(qsa: Array<{ nome_socio: string; qualificacao_socio: string }>): string | null {
   if (!qsa?.length) return null;
-  const first = qsa.find(s => s?.nome_socio && String(s.nome_socio).trim().length > 0);
-  if (!first) return null;
-  return toTitleCase(String(first.nome_socio).trim());
+  const valid = qsa.filter(s => s?.nome_socio && String(s.nome_socio).trim().length > 0);
+  if (!valid.length) return null;
+
+  const priorities = ["ADMINISTRADOR", "DIRETOR", "PRESIDENTE", "SÓCIO", "SOCIO"];
+  for (const kw of priorities) {
+    const hit = valid.find(s => String(s.qualificacao_socio ?? "").toUpperCase().includes(kw));
+    if (hit) return toTitleCase(String(hit.nome_socio).trim());
+  }
+  return toTitleCase(String(valid[0].nome_socio).trim());
 }
 
 
@@ -378,6 +378,81 @@ async function aiFallbackDecisor(
   console.log("[IA] Retornou null");
   return null;
 }
+
+// ─── Extractor genérico: pede ao Gemini um nome de pessoa a partir de um texto ───
+async function extractPersonNameFromText(
+  systemPrompt: string,
+  userText: string,
+  lovableKey: string,
+  label: string,
+): Promise<string | null> {
+  if (!userText.trim()) return null;
+  try {
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userText.slice(0, 8000) },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "extract_person",
+            parameters: {
+              type: "object",
+              properties: {
+                nome: { type: "string", nullable: true, description: "Nome completo em Title Case ou null" },
+              },
+              required: ["nome"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "extract_person" } },
+      }),
+    });
+    if (!aiRes.ok) { console.error(`[${label}] gateway ${aiRes.status}`); return null; }
+    const data = await aiRes.json();
+    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
+    const nome = args.nome;
+    if (nome && nome !== "null" && nome !== "N/A" && String(nome).trim().length > 2) {
+      const clean = toTitleCase(String(nome).trim());
+      console.log(`[${label}] decisor: ${clean}`);
+      return clean;
+    }
+  } catch (e) {
+    console.error(`[${label}] erro:`, e);
+  }
+  return null;
+}
+
+async function decisorFromInstagram(igUrl: string, firecrawlKey: string, lovableKey: string): Promise<string | null> {
+  const md = await scrapeUrl(igUrl, firecrawlKey);
+  if (!md || md.length < 50) return null;
+  return extractPersonNameFromText(
+    "Extraia apenas o nome completo de uma pessoa física mencionada como dono, fundador, proprietário, coach ou responsável. Procure na bio, destaques e títulos dos posts. Retorne apenas o nome em Title Case ou null se não encontrar com certeza. Nunca invente.",
+    md,
+    lovableKey,
+    "IG-bio",
+  );
+}
+
+async function decisorFromGoogleReviews(nome: string, cidade: string | null, firecrawlKey: string, lovableKey: string): Promise<string | null> {
+  const q = `"${nome}"${cidade ? ` "${cidade}"` : ""} avaliações OR reviews proprietário`;
+  const text = await searchWeb(q, firecrawlKey);
+  if (!text.trim()) return null;
+  return extractPersonNameFromText(
+    "Nas respostas do proprietário a avaliações, existe um nome de pessoa física assinando? Retorne apenas o nome em Title Case ou null. Nunca invente.",
+    text,
+    lovableKey,
+    "GReviews",
+  );
+}
+
+
 
 // ─── Phone type detection ───
 function detectPhoneType(phone: string | null): "celular" | "fixo" | null {
@@ -693,26 +768,30 @@ Deno.serve(async (req) => {
       FIRECRAWL_API_KEY, LOVABLE_API_KEY
     );
 
-    // ── ESTÁGIO 1: CNPJ ──
+    // ── ESTÁGIO 1: CNPJ (timeout 8s) ──
     let foundCnpj = cnpj || null;
     if (!foundCnpj) {
-      foundCnpj = await findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY);
+      foundCnpj = await withTimeout(
+        findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY),
+        STAGE_TIMEOUT_MS,
+        "findCnpj",
+      );
     }
     if (foundCnpj) {
       updates.cnpj = foundCnpj;
     }
 
-    // ── ESTÁGIO 2: B2BLeads (fonte primária) ──
+    // ── ESTÁGIO 2: B2BLeads + BrasilAPI QSA em paralelo (timeout 8s cada) ──
     let decisorFound = false;
     let decisorFonte: string | null = null;
     if (foundCnpj) {
-      const b2bData = await scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
+      const [b2bData, brasilData] = await Promise.all([
+        withTimeout(scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "b2bleads"),
+        withTimeout(queryBrasilApi(foundCnpj), STAGE_TIMEOUT_MS, "brasilapi"),
+      ]);
+
+      // B2BLeads sempre preenche campos gerais quando disponíveis
       if (b2bData) {
-        if (needsDecisor && b2bData.nome_decisor) {
-          updates.nome_decisor = b2bData.nome_decisor;
-          decisorFound = true;
-          decisorFonte = "b2bleads";
-        }
         if (!telefone && b2bData.telefone) updates.telefone = b2bData.telefone;
         if (!endereco && b2bData.endereco) updates.endereco = b2bData.endereco;
         if (!cidade && b2bData.cidade) updates.cidade = b2bData.cidade;
@@ -720,23 +799,13 @@ Deno.serve(async (req) => {
         if (!instagram && b2bData.instagram) updates.instagram = b2bData.instagram;
         if (!linkedin && b2bData.linkedin) updates.linkedin = b2bData.linkedin;
       }
-    }
 
-    // ── ESTÁGIO 3: BrasilAPI fallback (se b2bleads não achou decisor) ──
-    if (foundCnpj && needsDecisor && !decisorFound) {
-      const brasilData = await queryBrasilApi(foundCnpj);
+      // BrasilAPI complementa campos gerais quando ativa
+      let brasilQsaDecisor: string | null = null;
       if (brasilData) {
         const situacao = String(brasilData.situacao_cadastral ?? "").toUpperCase();
         if (situacao !== "BAIXADA" && situacao !== "INAPTA") {
-          if (brasilData.qsa?.length) {
-            const decisor = selectDecisor(brasilData.qsa);
-            if (decisor) {
-              updates.nome_decisor = decisor;
-              decisorFound = true;
-              decisorFonte = "brasilapi_qsa";
-              console.log(`[QSA] Decisor selecionado: ${decisor} (fonte: brasilapi_qsa)`);
-            }
-          }
+          if (brasilData.qsa?.length) brasilQsaDecisor = selectDecisor(brasilData.qsa);
           if (!telefone && !updates.telefone && brasilData.telefone?.trim()) {
             updates.telefone = brasilData.telefone.trim();
           }
@@ -749,24 +818,75 @@ Deno.serve(async (req) => {
           }
         }
       }
-    }
 
-    // ── ESTÁGIO 4: Fallback IA (só se decisor ainda vazio) ──
-    if (needsDecisor && !decisorFound) {
-      const aiDecisor = await aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY);
-      if (aiDecisor) {
-        updates.nome_decisor = aiDecisor;
-        decisorFonte = "ia_fallback";
+      // Prioridade do decisor: B2BLeads > BrasilAPI
+      if (needsDecisor) {
+        if (b2bData?.nome_decisor) {
+          updates.nome_decisor = b2bData.nome_decisor;
+          decisorFound = true;
+          decisorFonte = "b2bleads";
+        } else if (brasilQsaDecisor) {
+          updates.nome_decisor = brasilQsaDecisor;
+          decisorFound = true;
+          decisorFonte = "brasilapi_qsa";
+          console.log(`[QSA] Decisor selecionado: ${brasilQsaDecisor}`);
+        }
       }
     }
 
-    // Merge general fields (don't overwrite what B2BLeads/BrasilAPI already filled)
+    // Merge campos gerais primeiro (para termos Instagram atualizado antes do próximo estágio)
     const generalUpdates = await generalPromise;
     for (const [key, val] of Object.entries(generalUpdates)) {
       if (!updates[key]) {
         updates[key] = val;
       }
     }
+
+    // ── ESTÁGIO 3: Instagram bio (se decisor ainda vazio) ──
+    if (needsDecisor && !decisorFound) {
+      const igUrl = (updates.instagram as string) || instagram || null;
+      if (igUrl) {
+        const igDecisor = await withTimeout(
+          decisorFromInstagram(igUrl, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+          STAGE_TIMEOUT_MS,
+          "IG-bio",
+        );
+        if (igDecisor) {
+          updates.nome_decisor = igDecisor;
+          decisorFound = true;
+          decisorFonte = "instagram_bio";
+        }
+      }
+    }
+
+    // ── ESTÁGIO 4: Google reviews (se decisor ainda vazio) ──
+    if (needsDecisor && !decisorFound) {
+      const revDecisor = await withTimeout(
+        decisorFromGoogleReviews(nome_empresa, (updates.cidade as string) || cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+        STAGE_TIMEOUT_MS,
+        "GReviews",
+      );
+      if (revDecisor) {
+        updates.nome_decisor = revDecisor;
+        decisorFound = true;
+        decisorFonte = "google_reviews";
+      }
+    }
+
+    // ── ESTÁGIO 5: Fallback IA (último recurso) ──
+    if (needsDecisor && !decisorFound) {
+      const aiDecisor = await withTimeout(
+        aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+        STAGE_TIMEOUT_MS,
+        "ia_fallback",
+      );
+      if (aiDecisor) {
+        updates.nome_decisor = aiDecisor;
+        decisorFonte = "ia_fallback";
+      }
+    }
+
+
 
     // ── ESTÁGIO 5: Instagram deep scrape + Google Maps scrape (paralelo) ──
     const finalSite = (updates.site as string) || site || null;

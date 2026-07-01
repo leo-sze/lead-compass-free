@@ -390,6 +390,7 @@ const Leads = () => {
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
+    if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
     if (dateFrom) {
       const from = new Date(dateFrom);
       from.setHours(0, 0, 0, 0);

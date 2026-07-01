@@ -274,6 +274,7 @@ const Leads = () => {
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
   const [hasDecisor, setHasDecisor] = useState(false);
+  const [noDecisor, setNoDecisor] = useState(false);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");

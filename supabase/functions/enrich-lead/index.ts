@@ -137,9 +137,9 @@ async function findCnpj(
         : null,
     },
     {
-      label: "cnpj.biz",
+      label: "site:cnpj.biz",
       run: async () => extractCnpjFromText(
-        await scrapeUrl(`https://cnpj.biz/procura/${encodeURIComponent(nome)}`, firecrawlKey)
+        await searchWeb(`"${nome}" site:cnpj.biz`, firecrawlKey)
       ),
     },
   ];

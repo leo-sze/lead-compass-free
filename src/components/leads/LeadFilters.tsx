@@ -136,8 +136,12 @@ const LeadFilters = ({
       </div>
       <div className="flex flex-wrap gap-4">
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <Checkbox checked={hasPhone} onCheckedChange={(v) => onHasPhoneChange(!!v)} />
+          <Checkbox checked={hasPhone} onCheckedChange={(v) => { onHasPhoneChange(!!v); if (v) onNoPhoneChange(false); }} />
           Com telefone
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={noPhone} onCheckedChange={(v) => { onNoPhoneChange(!!v); if (v) onHasPhoneChange(false); }} />
+          Sem telefone
         </label>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={hasSite} onCheckedChange={(v) => onHasSiteChange(!!v)} />

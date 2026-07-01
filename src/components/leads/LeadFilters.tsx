@@ -31,6 +31,8 @@ interface LeadFiltersProps {
   onHasInstagramChange: (value: boolean) => void;
   hasDecisor: boolean;
   onHasDecisorChange: (value: boolean) => void;
+  noDecisor: boolean;
+  onNoDecisorChange: (value: boolean) => void;
   dateFrom: Date | undefined;
   onDateFromChange: (value: Date | undefined) => void;
   dateTo: Date | undefined;
@@ -46,6 +48,7 @@ const LeadFilters = ({
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
   hasDecisor, onHasDecisorChange,
+  noDecisor, onNoDecisorChange,
   dateFrom, onDateFromChange,
   dateTo, onDateToChange,
 }: LeadFiltersProps) => {
@@ -152,8 +155,12 @@ const LeadFilters = ({
           Com Instagram
         </label>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <Checkbox checked={hasDecisor} onCheckedChange={(v) => onHasDecisorChange(!!v)} />
+          <Checkbox checked={hasDecisor} onCheckedChange={(v) => { onHasDecisorChange(!!v); if (v) onNoDecisorChange(false); }} />
           Com decisor
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={noDecisor} onCheckedChange={(v) => { onNoDecisorChange(!!v); if (v) onHasDecisorChange(false); }} />
+          Sem decisor
         </label>
       </div>
     </div>

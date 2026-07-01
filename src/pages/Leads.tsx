@@ -274,6 +274,7 @@ const Leads = () => {
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
   const [hasDecisor, setHasDecisor] = useState(false);
+  const [noDecisor, setNoDecisor] = useState(false);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
@@ -389,6 +390,7 @@ const Leads = () => {
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
+    if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
     if (dateFrom) {
       const from = new Date(dateFrom);
       from.setHours(0, 0, 0, 0);
@@ -401,7 +403,7 @@ const Leads = () => {
     }
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, qualityFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -411,7 +413,7 @@ const Leads = () => {
     [filtered, pageStart, pageSize]
   );
 
-  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, qualityFilter, dateFrom, dateTo, pageSize]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -974,6 +976,8 @@ const Leads = () => {
         onHasInstagramChange={setHasInstagram}
         hasDecisor={hasDecisor}
         onHasDecisorChange={setHasDecisor}
+        noDecisor={noDecisor}
+        onNoDecisorChange={setNoDecisor}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}

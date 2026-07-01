@@ -139,7 +139,7 @@ async function findCnpj(
     {
       label: "cnpj.biz",
       run: async () => extractCnpjFromText(
-        await scrapeUrl(`https://cnpj.biz/?q=${encodeURIComponent(nome)}`, firecrawlKey)
+        await scrapeUrl(`https://cnpj.biz/procura/${encodeURIComponent(nome)}`, firecrawlKey)
       ),
     },
   ];

@@ -314,9 +314,22 @@ const Leads = () => {
   }, [kommoStatuses]);
 
   const fetchLeads = async () => {
-    const { data } = await supabase.from("leads").select("*").order("created_at", { ascending: false });
-    if (data) setLeads(data as Lead[]);
+    // Paginate: Supabase caps a single request at 1000 rows
+    const PAGE = 1000;
+    let all: Lead[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE - 1);
+      if (error || !data) break;
+      all = all.concat(data as Lead[]);
+      if (data.length < PAGE) break;
+    }
+    setLeads(all);
   };
+
 
   const fetchTemplate = async () => {
     const { data } = await supabase.from("settings").select("value").eq("key", "whatsapp_template").maybeSingle();

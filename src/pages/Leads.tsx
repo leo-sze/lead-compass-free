@@ -270,6 +270,7 @@ const Leads = () => {
   const [selectedCidade, setSelectedCidade] = useState("all");
   const [selectedFonte, setSelectedFonte] = useState("all");
   const [hasPhone, setHasPhone] = useState(false);
+  const [noPhone, setNoPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
   const [hasDecisor, setHasDecisor] = useState(false);

@@ -1021,7 +1021,7 @@ const Leads = () => {
               <TableRow className="border-border/50">
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={selectableCount > 0 && selected.size === selectableCount}
+                    checked={allSelectedOnPage}
                     onCheckedChange={toggleAll}
                   />
                 </TableHead>

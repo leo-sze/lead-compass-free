@@ -393,6 +393,8 @@ const Leads = () => {
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
     if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
+    if (kommoImported) result = result.filter((l) => kommoStatuses[l.id]?.status === "success");
+    if (kommoNotImported) result = result.filter((l) => kommoStatuses[l.id]?.status !== "success");
     if (dateFrom) {
       const from = new Date(dateFrom);
       from.setHours(0, 0, 0, 0);

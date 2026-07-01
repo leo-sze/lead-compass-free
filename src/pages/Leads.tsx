@@ -1161,6 +1161,73 @@ const Leads = () => {
         </CardContent>
       </Card>
 
+      {/* Pagination controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Leads por página:</span>
+          {[15, 30, 50, 100].map((n) => (
+            <Button
+              key={n}
+              variant={pageSize === n ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setPageSize(n)}
+            >
+              {n}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length === 0
+              ? "0 resultados"
+              : `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} de ${filtered.length}`}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage(1)}
+            >
+              «
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              ‹
+            </Button>
+            <span className="px-2 text-xs tabular-nums">
+              Página {safePage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
+              ›
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage(totalPages)}
+            >
+              »
+            </Button>
+          </div>
+        </div>
+      </div>
+
+
       {/* Floating toolbar */}
       {selected.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4 z-50">

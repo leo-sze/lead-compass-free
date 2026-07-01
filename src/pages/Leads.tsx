@@ -287,6 +287,8 @@ const Leads = () => {
   const [bulkScoreProgress, setBulkScoreProgress] = useState({ current: 0, total: 0 });
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [showTagPopover, setShowTagPopover] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(30);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const { toast } = useToast();
 
   // Kommo export state
@@ -401,6 +403,16 @@ const Leads = () => {
     return result;
   }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const paginated = useMemo(
+    () => filtered.slice(pageStart, pageStart + pageSize),
+    [filtered, pageStart, pageSize]
+  );
+
+  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo, pageSize]);
+
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
     [leads, selected]
@@ -447,11 +459,17 @@ const Leads = () => {
   };
 
   const toggleAll = () => {
-    if (selected.size === filtered.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(filtered.map((l) => l.id)));
-    }
+    const pageIds = paginated.map((l) => l.id);
+    const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelectedOnPage) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
   };
 
   const removeExportedLeads = async () => {
@@ -828,7 +846,8 @@ const Leads = () => {
     setSelected(new Set());
   };
 
-  const selectableCount = filtered.length;
+  const pageIds = paginated.map((l) => l.id);
+  const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
   return (
     <div className="space-y-6">
@@ -1002,7 +1021,7 @@ const Leads = () => {
               <TableRow className="border-border/50">
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={selectableCount > 0 && selected.size === selectableCount}
+                    checked={allSelectedOnPage}
                     onCheckedChange={toggleAll}
                   />
                 </TableHead>
@@ -1024,14 +1043,14 @@ const Leads = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={16} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((lead) => {
+                paginated.map((lead) => {
                   const ks = kommoStatuses[lead.id];
                   const isExported = ks?.status === "success";
                   const isScoring = reAnalyzing.has(lead.id);
@@ -1141,6 +1160,73 @@ const Leads = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Pagination controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Leads por página:</span>
+          {[15, 30, 50, 100].map((n) => (
+            <Button
+              key={n}
+              variant={pageSize === n ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setPageSize(n)}
+            >
+              {n}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-muted-foreground">
+            {filtered.length === 0
+              ? "0 resultados"
+              : `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} de ${filtered.length}`}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage(1)}
+            >
+              «
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              ‹
+            </Button>
+            <span className="px-2 text-xs tabular-nums">
+              Página {safePage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
+              ›
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2"
+              disabled={safePage >= totalPages}
+              onClick={() => setCurrentPage(totalPages)}
+            >
+              »
+            </Button>
+          </div>
+        </div>
+      </div>
+
 
       {/* Floating toolbar */}
       {selected.size > 0 && (

@@ -947,6 +947,8 @@ const Leads = () => {
         onFonteChange={setSelectedFonte}
         hasPhone={hasPhone}
         onHasPhoneChange={setHasPhone}
+        noPhone={noPhone}
+        onNoPhoneChange={setNoPhone}
         hasSite={hasSite}
         onHasSiteChange={setHasSite}
         hasInstagram={hasInstagram}

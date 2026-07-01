@@ -379,6 +379,81 @@ async function aiFallbackDecisor(
   return null;
 }
 
+// ─── Extractor genérico: pede ao Gemini um nome de pessoa a partir de um texto ───
+async function extractPersonNameFromText(
+  systemPrompt: string,
+  userText: string,
+  lovableKey: string,
+  label: string,
+): Promise<string | null> {
+  if (!userText.trim()) return null;
+  try {
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userText.slice(0, 8000) },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "extract_person",
+            parameters: {
+              type: "object",
+              properties: {
+                nome: { type: "string", nullable: true, description: "Nome completo em Title Case ou null" },
+              },
+              required: ["nome"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "extract_person" } },
+      }),
+    });
+    if (!aiRes.ok) { console.error(`[${label}] gateway ${aiRes.status}`); return null; }
+    const data = await aiRes.json();
+    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
+    const nome = args.nome;
+    if (nome && nome !== "null" && nome !== "N/A" && String(nome).trim().length > 2) {
+      const clean = toTitleCase(String(nome).trim());
+      console.log(`[${label}] decisor: ${clean}`);
+      return clean;
+    }
+  } catch (e) {
+    console.error(`[${label}] erro:`, e);
+  }
+  return null;
+}
+
+async function decisorFromInstagram(igUrl: string, firecrawlKey: string, lovableKey: string): Promise<string | null> {
+  const md = await scrapeUrl(igUrl, firecrawlKey);
+  if (!md || md.length < 50) return null;
+  return extractPersonNameFromText(
+    "Extraia apenas o nome completo de uma pessoa física mencionada como dono, fundador, proprietário, coach ou responsável. Procure na bio, destaques e títulos dos posts. Retorne apenas o nome em Title Case ou null se não encontrar com certeza. Nunca invente.",
+    md,
+    lovableKey,
+    "IG-bio",
+  );
+}
+
+async function decisorFromGoogleReviews(nome: string, cidade: string | null, firecrawlKey: string, lovableKey: string): Promise<string | null> {
+  const q = `"${nome}"${cidade ? ` "${cidade}"` : ""} avaliações OR reviews proprietário`;
+  const text = await searchWeb(q, firecrawlKey);
+  if (!text.trim()) return null;
+  return extractPersonNameFromText(
+    "Nas respostas do proprietário a avaliações, existe um nome de pessoa física assinando? Retorne apenas o nome em Title Case ou null. Nunca invente.",
+    text,
+    lovableKey,
+    "GReviews",
+  );
+}
+
+
+
 // ─── Phone type detection ───
 function detectPhoneType(phone: string | null): "celular" | "fixo" | null {
   if (!phone) return null;

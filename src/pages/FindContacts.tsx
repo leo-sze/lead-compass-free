@@ -71,7 +71,47 @@ function hasPhone(row: Record<string, string>): boolean {
   );
 }
 
+// Simplified Google Maps export: Nome, Telefone (ou "elefone"), Nota, Classificação, Endereço
+function isSimpleMapsFormat(row: Record<string, string>): boolean {
+  const keys = Object.keys(row).map(k => k.toLowerCase().trim());
+  const hasNome = keys.includes("nome");
+  const hasPhoneCol = keys.some(k => k === "telefone" || k === "elefone" || k === "phone");
+  return hasNome && hasPhoneCol;
+}
+
+function getVal(row: Record<string, string>, ...candidates: string[]): string {
+  for (const c of candidates) {
+    const lc = c.toLowerCase();
+    for (const key of Object.keys(row)) {
+      if (key.toLowerCase().trim() === lc && row[key]?.trim()) return row[key].trim();
+    }
+  }
+  return "";
+}
+
 function rowToContact(row: Record<string, string>): Contact {
+  if (isSimpleMapsFormat(row)) {
+    const nome = getVal(row, "Nome");
+    const telefone = getVal(row, "Telefone", "elefone", "Phone");
+    const classificacao = getVal(row, "Classificação", "Classificacao", "Categoria");
+    const endereco = getVal(row, "Endereço", "Endereco", "Address");
+    return {
+      firstName: "",
+      lastName: "",
+      title: classificacao,
+      companyName: nome,
+      website: "",
+      city: endereco,
+      state: "",
+      country: "Brasil",
+      workDirectPhone: "",
+      mobilePhone: "",
+      corporatePhone: telefone,
+      otherPhone: "",
+      status: telefone ? "has_phone" : "pending",
+      _raw: { ...row, "Company Name": nome, "Corporate Phone": telefone, "City": endereco, "Country": "Brasil", "Title": classificacao },
+    };
+  }
   return {
     firstName: row["First Name"] || "",
     lastName: row["Last Name"] || "",

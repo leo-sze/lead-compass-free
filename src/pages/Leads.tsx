@@ -270,6 +270,7 @@ const Leads = () => {
   const [selectedCidade, setSelectedCidade] = useState("all");
   const [selectedFonte, setSelectedFonte] = useState("all");
   const [hasPhone, setHasPhone] = useState(false);
+  const [noPhone, setNoPhone] = useState(false);
   const [hasSite, setHasSite] = useState(false);
   const [hasInstagram, setHasInstagram] = useState(false);
   const [hasDecisor, setHasDecisor] = useState(false);
@@ -382,6 +383,7 @@ const Leads = () => {
     if (selectedCidade !== "all") result = result.filter((l) => l.cidade === selectedCidade);
     if (selectedFonte !== "all") result = result.filter((l) => l.fonte === selectedFonte);
     if (hasPhone) result = result.filter((l) => l.telefone);
+    if (noPhone) result = result.filter((l) => !l.telefone || !String(l.telefone).trim());
     if (hasSite) result = result.filter((l) => l.site);
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
@@ -397,7 +399,7 @@ const Leads = () => {
     }
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, qualityFilter, dateFrom, dateTo]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -945,6 +947,8 @@ const Leads = () => {
         onFonteChange={setSelectedFonte}
         hasPhone={hasPhone}
         onHasPhoneChange={setHasPhone}
+        noPhone={noPhone}
+        onNoPhoneChange={setNoPhone}
         hasSite={hasSite}
         onHasSiteChange={setHasSite}
         hasInstagram={hasInstagram}

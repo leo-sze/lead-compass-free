@@ -23,6 +23,8 @@ interface LeadFiltersProps {
   onFonteChange: (value: string) => void;
   hasPhone: boolean;
   onHasPhoneChange: (value: boolean) => void;
+  noPhone: boolean;
+  onNoPhoneChange: (value: boolean) => void;
   hasSite: boolean;
   onHasSiteChange: (value: boolean) => void;
   hasInstagram: boolean;
@@ -40,6 +42,7 @@ const LeadFilters = ({
   cidades, selectedCidade, onCidadeChange,
   fontes, selectedFonte, onFonteChange,
   hasPhone, onHasPhoneChange,
+  noPhone, onNoPhoneChange,
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
   hasDecisor, onHasDecisorChange,
@@ -133,8 +136,12 @@ const LeadFilters = ({
       </div>
       <div className="flex flex-wrap gap-4">
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
-          <Checkbox checked={hasPhone} onCheckedChange={(v) => onHasPhoneChange(!!v)} />
+          <Checkbox checked={hasPhone} onCheckedChange={(v) => { onHasPhoneChange(!!v); if (v) onNoPhoneChange(false); }} />
           Com telefone
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={noPhone} onCheckedChange={(v) => { onNoPhoneChange(!!v); if (v) onHasPhoneChange(false); }} />
+          Sem telefone
         </label>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={hasSite} onCheckedChange={(v) => onHasSiteChange(!!v)} />

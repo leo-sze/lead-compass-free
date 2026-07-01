@@ -287,6 +287,8 @@ const Leads = () => {
   const [bulkScoreProgress, setBulkScoreProgress] = useState({ current: 0, total: 0 });
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [showTagPopover, setShowTagPopover] = useState(false);
+  const [pageSize, setPageSize] = useState<number>(30);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const { toast } = useToast();
 
   // Kommo export state

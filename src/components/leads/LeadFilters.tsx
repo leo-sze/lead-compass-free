@@ -23,6 +23,8 @@ interface LeadFiltersProps {
   onFonteChange: (value: string) => void;
   hasPhone: boolean;
   onHasPhoneChange: (value: boolean) => void;
+  noPhone: boolean;
+  onNoPhoneChange: (value: boolean) => void;
   hasSite: boolean;
   onHasSiteChange: (value: boolean) => void;
   hasInstagram: boolean;

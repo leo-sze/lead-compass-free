@@ -96,28 +96,38 @@ function extractLogradouro(endereco: string | null): string | null {
   return head.length >= 4 ? head : null;
 }
 
+// Timeout wrapper: resolves to null if the promise takes longer than `ms`
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => {
+      console.log(`[timeout] ${label} > ${ms}ms — pulando`);
+      resolve(null);
+    }, ms);
+    p.then((v) => { clearTimeout(t); resolve(v); })
+     .catch((e) => { clearTimeout(t); console.error(`[${label}] erro:`, e); resolve(null); });
+  });
+}
+
+const STAGE_TIMEOUT_MS = 8000;
+
 async function findCnpj(
   nome: string,
   cidade: string | null,
-  telefone: string | null,
+  _telefone: string | null,
   endereco: string | null,
   firecrawlKey: string
 ): Promise<string | null> {
-  const locationQ = cidade ? ` "${cidade}"` : "";
   const logradouro = extractLogradouro(endereco);
-  const tel = telefone?.trim() || null;
 
-  // Todas as estratégias rodam em paralelo. A ordem do array define a prioridade
-  // caso mais de uma retorne um CNPJ válido.
   const strategies: Array<{ label: string; run: () => Promise<string | null> }> = [
     {
-      label: "casadosdados+cidade",
-      run: async () => extractCnpjFromText(await searchWeb(`"${nome}"${locationQ} site:casadosdados.com.br`, firecrawlKey)),
+      label: "nome+CNPJ",
+      run: async () => extractCnpjFromText(await searchWeb(`"${nome}" CNPJ`, firecrawlKey)),
     },
     {
-      label: "casadosdados+logradouro",
-      run: async () => logradouro
-        ? extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${logradouro}"${locationQ}`, firecrawlKey))
+      label: "nome+cidade+CNPJ",
+      run: async () => cidade
+        ? extractCnpjFromText(await searchWeb(`"${nome}" "${cidade}" CNPJ`, firecrawlKey))
         : null,
     },
     {
@@ -125,22 +135,6 @@ async function findCnpj(
       run: async () => logradouro
         ? extractCnpjFromText(await searchWeb(`"${nome}" "${logradouro}" CNPJ`, firecrawlKey))
         : null,
-    },
-    {
-      label: "busca genérica",
-      run: async () => extractCnpjFromText(await searchWeb(`"${nome}"${locationQ} CNPJ`, firecrawlKey)),
-    },
-    {
-      label: "casadosdados só-nome",
-      run: async () => extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${nome}"`, firecrawlKey)),
-    },
-    {
-      label: "telefone+CNPJ",
-      run: async () => tel ? extractCnpjFromText(await searchWeb(`"${tel}" CNPJ`, firecrawlKey)) : null,
-    },
-    {
-      label: "telefone+casadosdados",
-      run: async () => tel ? extractCnpjFromText(await searchWeb(`site:casadosdados.com.br "${tel}"`, firecrawlKey)) : null,
     },
   ];
 

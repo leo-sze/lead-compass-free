@@ -976,6 +976,8 @@ const Leads = () => {
         onHasInstagramChange={setHasInstagram}
         hasDecisor={hasDecisor}
         onHasDecisorChange={setHasDecisor}
+        noDecisor={noDecisor}
+        onNoDecisorChange={setNoDecisor}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}

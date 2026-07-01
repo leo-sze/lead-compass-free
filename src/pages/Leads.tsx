@@ -982,6 +982,10 @@ const Leads = () => {
         onHasDecisorChange={setHasDecisor}
         noDecisor={noDecisor}
         onNoDecisorChange={setNoDecisor}
+        kommoImported={kommoImported}
+        onKommoImportedChange={setKommoImported}
+        kommoNotImported={kommoNotImported}
+        onKommoNotImportedChange={setKommoNotImported}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}

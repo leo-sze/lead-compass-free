@@ -48,6 +48,7 @@ const LeadFilters = ({
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
   hasDecisor, onHasDecisorChange,
+  noDecisor, onNoDecisorChange,
   dateFrom, onDateFromChange,
   dateTo, onDateToChange,
 }: LeadFiltersProps) => {

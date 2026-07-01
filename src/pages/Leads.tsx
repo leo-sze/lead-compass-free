@@ -846,7 +846,8 @@ const Leads = () => {
     setSelected(new Set());
   };
 
-  const selectableCount = filtered.length;
+  const pageIds = paginated.map((l) => l.id);
+  const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 
   return (
     <div className="space-y-6">

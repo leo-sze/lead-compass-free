@@ -293,9 +293,15 @@ function toTitleCase(name: string): string {
 
 function selectDecisor(qsa: Array<{ nome_socio: string; qualificacao_socio: string }>): string | null {
   if (!qsa?.length) return null;
-  const first = qsa.find(s => s?.nome_socio && String(s.nome_socio).trim().length > 0);
-  if (!first) return null;
-  return toTitleCase(String(first.nome_socio).trim());
+  const valid = qsa.filter(s => s?.nome_socio && String(s.nome_socio).trim().length > 0);
+  if (!valid.length) return null;
+
+  const priorities = ["ADMINISTRADOR", "DIRETOR", "PRESIDENTE", "SÓCIO", "SOCIO"];
+  for (const kw of priorities) {
+    const hit = valid.find(s => String(s.qualificacao_socio ?? "").toUpperCase().includes(kw));
+    if (hit) return toTitleCase(String(hit.nome_socio).trim());
+  }
+  return toTitleCase(String(valid[0].nome_socio).trim());
 }
 
 

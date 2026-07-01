@@ -42,9 +42,6 @@ interface LeadFiltersProps {
   dateTo: Date | undefined;
   onDateToChange: (value: Date | undefined) => void;
 }
-  dateTo: Date | undefined;
-  onDateToChange: (value: Date | undefined) => void;
-}
 const LeadFilters = ({
   filter, onFilterChange,
   termos, selectedTermo, onTermoChange,
@@ -56,6 +53,8 @@ const LeadFilters = ({
   hasInstagram, onHasInstagramChange,
   hasDecisor, onHasDecisorChange,
   noDecisor, onNoDecisorChange,
+  kommoImported, onKommoImportedChange,
+  kommoNotImported, onKommoNotImportedChange,
   dateFrom, onDateFromChange,
   dateTo, onDateToChange,
 }: LeadFiltersProps) => {

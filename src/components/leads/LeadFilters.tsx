@@ -42,6 +42,7 @@ const LeadFilters = ({
   cidades, selectedCidade, onCidadeChange,
   fontes, selectedFonte, onFonteChange,
   hasPhone, onHasPhoneChange,
+  noPhone, onNoPhoneChange,
   hasSite, onHasSiteChange,
   hasInstagram, onHasInstagramChange,
   hasDecisor, onHasDecisorChange,

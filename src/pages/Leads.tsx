@@ -1043,14 +1043,14 @@ const Leads = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {paginated.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={16} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((lead) => {
+                paginated.map((lead) => {
                   const ks = kommoStatuses[lead.id];
                   const isExported = ks?.status === "success";
                   const isScoring = reAnalyzing.has(lead.id);

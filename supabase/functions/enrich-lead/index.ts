@@ -136,6 +136,12 @@ async function findCnpj(
         ? extractCnpjFromText(await searchWeb(`"${nome}" "${logradouro}" CNPJ`, firecrawlKey))
         : null,
     },
+    {
+      label: "cnpj.biz",
+      run: async () => extractCnpjFromText(
+        await scrapeUrl(`https://cnpj.biz/?q=${encodeURIComponent(nome)}`, firecrawlKey)
+      ),
+    },
   ];
 
   const results = await Promise.all(strategies.map(s =>

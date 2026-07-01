@@ -286,14 +286,32 @@ export default function FindContacts() {
       fonte: "Apollo CSV",
     }));
 
-    const { error } = await supabase.from("leads").upsert(leadsToInsert, { onConflict: "nome_empresa,telefone", ignoreDuplicates: true });
-    if (error) {
-      toast({ title: "Erro ao enviar leads", description: error.message, variant: "destructive" });
-      return;
+    // Batch to avoid PostgREST row limits and huge payloads
+    const BATCH_SIZE = 500;
+    let inserted = 0;
+    const errors: string[] = [];
+
+    for (let i = 0; i < leadsToInsert.length; i += BATCH_SIZE) {
+      const batch = leadsToInsert.slice(i, i + BATCH_SIZE);
+      const { data, error } = await supabase
+        .from("leads")
+        .upsert(batch, { onConflict: "nome_empresa,telefone", ignoreDuplicates: true })
+        .select("id");
+      if (error) {
+        errors.push(`Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`);
+        continue;
+      }
+      inserted += data?.length ?? 0;
     }
-    toast({ title: `${leadsToInsert.length} leads enviados com sucesso!` });
+
+    if (errors.length > 0) {
+      toast({ title: "Alguns lotes falharam", description: errors.join(" · "), variant: "destructive" });
+    }
+    const skipped = leadsToInsert.length - inserted;
+    toast({ title: `${inserted} novos leads inseridos`, description: `${skipped} já existiam (deduplicados por nome + telefone)` });
     navigate("/leads");
   }, [contacts, toast, navigate]);
+
 
   // Removed: scoring logic moved to Leads page
 

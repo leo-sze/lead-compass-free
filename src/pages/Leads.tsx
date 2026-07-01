@@ -275,6 +275,8 @@ const Leads = () => {
   const [hasInstagram, setHasInstagram] = useState(false);
   const [hasDecisor, setHasDecisor] = useState(false);
   const [noDecisor, setNoDecisor] = useState(false);
+  const [kommoImported, setKommoImported] = useState(false);
+  const [kommoNotImported, setKommoNotImported] = useState(false);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
@@ -391,6 +393,8 @@ const Leads = () => {
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
     if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
+    if (kommoImported) result = result.filter((l) => kommoStatuses[l.id]?.status === "success");
+    if (kommoNotImported) result = result.filter((l) => kommoStatuses[l.id]?.status !== "success");
     if (dateFrom) {
       const from = new Date(dateFrom);
       from.setHours(0, 0, 0, 0);
@@ -403,7 +407,7 @@ const Leads = () => {
     }
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, qualityFilter, dateFrom, dateTo]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, kommoStatuses, qualityFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -413,7 +417,7 @@ const Leads = () => {
     [filtered, pageStart, pageSize]
   );
 
-  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, qualityFilter, dateFrom, dateTo, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, qualityFilter, dateFrom, dateTo, pageSize]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -978,6 +982,10 @@ const Leads = () => {
         onHasDecisorChange={setHasDecisor}
         noDecisor={noDecisor}
         onNoDecisorChange={setNoDecisor}
+        kommoImported={kommoImported}
+        onKommoImportedChange={setKommoImported}
+        kommoNotImported={kommoNotImported}
+        onKommoNotImportedChange={setKommoNotImported}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}

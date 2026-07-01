@@ -417,7 +417,7 @@ const Leads = () => {
     [filtered, pageStart, pageSize]
   );
 
-  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, qualityFilter, dateFrom, dateTo, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, qualityFilter, dateFrom, dateTo, pageSize]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),

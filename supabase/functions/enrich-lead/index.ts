@@ -15,6 +15,14 @@ const BodySchema = z.object({
   nome_decisor: z.string().nullable().optional(),
   cidade: z.string().nullable().optional(),
   cnpj: z.string().nullable().optional(),
+  // Valores previamente enriquecidos — usados como fallback caso o scrape novo falhe,
+  // evitando que o score seja recalculado com null enquanto o DB mantém o valor antigo.
+  prev_instagram_last_post_days: z.number().nullable().optional(),
+  prev_instagram_profile_is_person: z.boolean().nullable().optional(),
+  prev_google_rating: z.number().nullable().optional(),
+  prev_google_review_count: z.number().nullable().optional(),
+  prev_google_owner_replied_recently: z.boolean().nullable().optional(),
+  prev_google_profile_complete: z.boolean().nullable().optional(),
 });
 
 const CNPJ_REGEX = /\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;
@@ -474,6 +482,8 @@ function detectPhoneType(phone: string | null): "celular" | "fixo" | null {
 interface InstagramScrapeResult {
   instagram_last_post_days: number | null;
   instagram_profile_is_person: boolean | null;
+  status: "success" | "failed" | "not_found";
+  raw: string;
 }
 
 async function scrapeInstagram(
@@ -483,8 +493,11 @@ async function scrapeInstagram(
   lovableKey: string
 ): Promise<InstagramScrapeResult> {
   const md = await scrapeUrl(igUrl, firecrawlKey);
-  if (!md || md.length < 50) return { instagram_last_post_days: null, instagram_profile_is_person: null };
-
+  console.log(`[IG] raw markdown length=${md?.length ?? 0} url=${igUrl}`);
+  if (!md || md.length < 50) {
+    console.log(`[IG] FALHA de coleta (md vazio/curto) — url=${igUrl}`);
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md || "" };
+  }
   try {
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -513,16 +526,21 @@ async function scrapeInstagram(
         tool_choice: { type: "function", function: { name: "extract_ig" } }
       }),
     });
-    if (!aiRes.ok) return { instagram_last_post_days: null, instagram_profile_is_person: null };
+    if (!aiRes.ok) {
+      console.log(`[IG] FALHA AI ${aiRes.status}`);
+      return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md };
+    }
     const data = await aiRes.json();
     const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    return {
-      instagram_last_post_days: typeof args.instagram_last_post_days === "number" ? Math.max(0, Math.round(args.instagram_last_post_days)) : null,
-      instagram_profile_is_person: typeof args.instagram_profile_is_person === "boolean" ? args.instagram_profile_is_person : null,
-    };
+    const days = typeof args.instagram_last_post_days === "number" ? Math.max(0, Math.round(args.instagram_last_post_days)) : null;
+    const isPerson = typeof args.instagram_profile_is_person === "boolean" ? args.instagram_profile_is_person : null;
+    // Se AI retornou tudo null e o markdown é curto/vazio, marcar como not_found (perfil privado / login wall)
+    const status: "success" | "not_found" = (days == null && isPerson == null) ? "not_found" : "success";
+    console.log(`[IG] status=${status} last_post_days=${days} is_person=${isPerson}`);
+    return { instagram_last_post_days: days, instagram_profile_is_person: isPerson, status, raw: md };
   } catch (e) {
     console.error("[IG] error:", e);
-    return { instagram_last_post_days: null, instagram_profile_is_person: null };
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md };
   }
 }
 
@@ -532,6 +550,8 @@ interface GoogleMapsResult {
   google_review_count: number | null;
   google_owner_replied_recently: boolean | null;
   google_profile_complete: boolean | null;
+  status: "success" | "failed" | "not_found";
+  raw: string;
 }
 
 async function scrapeGoogleMaps(
@@ -542,8 +562,10 @@ async function scrapeGoogleMaps(
 ): Promise<GoogleMapsResult> {
   const q = `"${nome}" ${cidade ? `"${cidade}"` : ""} site:google.com/maps OR site:maps.google.com`;
   const text = await searchWeb(q, firecrawlKey);
+  console.log(`[GMaps] search result length=${text?.length ?? 0} query=${q}`);
   if (!text || text.length < 50) {
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    console.log(`[GMaps] FALHA de coleta (search vazio) — query=${q}`);
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text || "" };
   }
   try {
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -575,18 +597,22 @@ async function scrapeGoogleMaps(
         tool_choice: { type: "function", function: { name: "extract_gmaps" } }
       }),
     });
-    if (!aiRes.ok) return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    if (!aiRes.ok) {
+      console.log(`[GMaps] FALHA AI ${aiRes.status}`);
+      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text };
+    }
     const data = await aiRes.json();
     const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    return {
-      google_rating: typeof args.google_rating === "number" ? Math.round(args.google_rating * 10) / 10 : null,
-      google_review_count: typeof args.google_review_count === "number" ? Math.round(args.google_review_count) : null,
-      google_owner_replied_recently: typeof args.google_owner_replied_recently === "boolean" ? args.google_owner_replied_recently : null,
-      google_profile_complete: typeof args.google_profile_complete === "boolean" ? args.google_profile_complete : null,
-    };
+    const rating = typeof args.google_rating === "number" ? Math.round(args.google_rating * 10) / 10 : null;
+    const count = typeof args.google_review_count === "number" ? Math.round(args.google_review_count) : null;
+    const owner = typeof args.google_owner_replied_recently === "boolean" ? args.google_owner_replied_recently : null;
+    const complete = typeof args.google_profile_complete === "boolean" ? args.google_profile_complete : null;
+    const status: "success" | "not_found" = (rating == null && count == null && owner == null && complete == null) ? "not_found" : "success";
+    console.log(`[GMaps] status=${status} rating=${rating} reviews=${count} owner_reply=${owner} complete=${complete}`);
+    return { google_rating: rating, google_review_count: count, google_owner_replied_recently: owner, google_profile_complete: complete, status, raw: text };
   } catch (e) {
     console.error("[GMaps] error:", e);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text };
   }
 }
 
@@ -750,7 +776,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { nome_empresa, site, instagram, linkedin, telefone, endereco, nome_decisor, cidade, cnpj } = parsed.data;
+    const {
+      nome_empresa, site, instagram, linkedin, telefone, endereco, nome_decisor, cidade, cnpj,
+      prev_instagram_last_post_days, prev_instagram_profile_is_person,
+      prev_google_rating, prev_google_review_count, prev_google_owner_replied_recently, prev_google_profile_complete,
+    } = parsed.data;
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -903,10 +933,16 @@ Deno.serve(async (req) => {
     const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
 
     const [igData, gmapsData] = await Promise.all([
-      finalIg ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY) : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null }),
+      finalIg
+        ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY)
+        : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found" as const, raw: "" }),
       scrapeGoogleMaps(nome_empresa, finalCid, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
     ]);
 
+    // Log bruto para debug
+    console.log(`[enrich] IG status=${igData.status} raw_len=${igData.raw.length} | GMaps status=${gmapsData.status} raw_len=${gmapsData.raw.length}`);
+
+    // Só grava campos novos quando o scrape retornou algo (preserva valores antigos no DB em caso de falha)
     if (igData.instagram_last_post_days != null) (updates as any).instagram_last_post_days = igData.instagram_last_post_days;
     if (igData.instagram_profile_is_person != null) (updates as any).instagram_profile_is_person = igData.instagram_profile_is_person;
     if (gmapsData.google_rating != null) (updates as any).google_rating = gmapsData.google_rating;
@@ -914,25 +950,61 @@ Deno.serve(async (req) => {
     if (gmapsData.google_owner_replied_recently != null) (updates as any).google_owner_replied_recently = gmapsData.google_owner_replied_recently;
     if (gmapsData.google_profile_complete != null) (updates as any).google_profile_complete = gmapsData.google_profile_complete;
 
+    // Status de coleta (sempre atualizado — diferencia "não tem" de "falhou")
+    (updates as any).instagram_scrape_status = finalIg ? igData.status : "not_found";
+    (updates as any).google_scrape_status = gmapsData.status;
+
+    // Debug: payload bruto do último enrich
+    (updates as any).debug_raw_data = {
+      ts: new Date().toISOString(),
+      instagram: {
+        url: finalIg,
+        status: igData.status,
+        raw_len: igData.raw.length,
+        raw_preview: igData.raw.slice(0, 1500),
+        parsed: {
+          instagram_last_post_days: igData.instagram_last_post_days,
+          instagram_profile_is_person: igData.instagram_profile_is_person,
+        },
+      },
+      google_maps: {
+        query_nome: nome_empresa,
+        query_cidade: finalCid,
+        status: gmapsData.status,
+        raw_len: gmapsData.raw.length,
+        raw_preview: gmapsData.raw.slice(0, 1500),
+        parsed: {
+          google_rating: gmapsData.google_rating,
+          google_review_count: gmapsData.google_review_count,
+          google_owner_replied_recently: gmapsData.google_owner_replied_recently,
+          google_profile_complete: gmapsData.google_profile_complete,
+        },
+      },
+    };
+
     // ── Phone type ──
     const phoneType = detectPhoneType(finalTel);
     if (phoneType) (updates as any).phone_type = phoneType;
 
     // ── Commercial score + tier ──
-    const { commercial_score, tier } = computeCommercialScore({
+    // IMPORTANTE: quando o scrape novo falha (null), usa o valor prévio do lead como fallback.
+    // Isso evita o bug de "DB tem 42 reviews mas score foi computado com null".
+    const scoreInput = {
       phone_type: phoneType,
       nome_decisor: finalDec,
-      instagram_last_post_days: igData.instagram_last_post_days,
+      instagram_last_post_days: igData.instagram_last_post_days ?? prev_instagram_last_post_days ?? null,
       site: finalSite,
-      google_profile_complete: gmapsData.google_profile_complete,
-      google_review_count: gmapsData.google_review_count,
-      google_owner_replied_recently: gmapsData.google_owner_replied_recently,
-      google_rating: gmapsData.google_rating,
-      instagram_profile_is_person: igData.instagram_profile_is_person,
+      google_profile_complete: gmapsData.google_profile_complete ?? prev_google_profile_complete ?? null,
+      google_review_count: gmapsData.google_review_count ?? prev_google_review_count ?? null,
+      google_owner_replied_recently: gmapsData.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? null,
+      google_rating: gmapsData.google_rating ?? prev_google_rating ?? null,
+      instagram_profile_is_person: igData.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? null,
       cnpj: (updates.cnpj as string) || cnpj || null,
       endereco: finalEnd,
       nome_empresa,
-    });
+    };
+    console.log(`[score] input:`, JSON.stringify(scoreInput));
+    const { commercial_score, tier } = computeCommercialScore(scoreInput);
     (updates as any).commercial_score = commercial_score;
     (updates as any).tier = tier;
 

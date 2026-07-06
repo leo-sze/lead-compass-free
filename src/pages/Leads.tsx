@@ -631,6 +631,14 @@ const Leads = () => {
             endereco: lead.endereco,
             nome_decisor: lead.nome_decisor,
             cidade: lead.cidade,
+            cnpj: (lead as any).cnpj ?? null,
+            // Envia valores prévios para servirem de fallback caso o scrape novo falhe.
+            prev_instagram_last_post_days: (lead as any).instagram_last_post_days ?? null,
+            prev_instagram_profile_is_person: (lead as any).instagram_profile_is_person ?? null,
+            prev_google_rating: (lead as any).google_rating ?? null,
+            prev_google_review_count: (lead as any).google_review_count ?? null,
+            prev_google_owner_replied_recently: (lead as any).google_owner_replied_recently ?? null,
+            prev_google_profile_complete: (lead as any).google_profile_complete ?? null,
           },
         });
 

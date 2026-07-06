@@ -791,6 +791,57 @@ const Leads = () => {
     toast({ title: "Análise concluída!", description: `${scored} leads analisados pela IA.` });
   }, [selected, leads, filtered, toast]);
 
+  const bulkGenerateMessages = useCallback(async () => {
+    const base = selected.size > 0 ? leads.filter(l => selected.has(l.id)) : filtered;
+    const toGen = regenerateMessages ? base : base.filter(l => !(l as any).mensagem_personalizada);
+
+    if (toGen.length === 0) {
+      toast({ title: "Nenhum lead para gerar", description: regenerateMessages ? "Nenhum lead selecionado." : "Todos os leads já têm mensagem. Marque 'Regenerar' para forçar.", variant: "destructive" });
+      return;
+    }
+
+    setBulkGenMsg(true);
+    setBulkGenProgress({ current: 0, total: toGen.length });
+
+    let done = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const lead of toGen) {
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-personalized-message", {
+          body: { lead_id: lead.id, regenerate: regenerateMessages },
+        });
+        if (error) throw error;
+        if ((data as any)?.error === "sem_analise") {
+          skipped++;
+        } else if ((data as any)?.error) {
+          throw new Error((data as any).message || (data as any).error);
+        } else {
+          const patch = {
+            mensagem_personalizada: data.mensagem,
+            mensagem_pontos_usados: data.pontos_usados,
+            mensagem_status: "gerada",
+            mensagem_gerada_em: new Date().toISOString(),
+          };
+          setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...patch } as any : l));
+        }
+      } catch (e) {
+        console.error("bulk gen msg error", lead.nome_empresa, e);
+        failed++;
+      }
+      done++;
+      setBulkGenProgress({ current: done, total: toGen.length });
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
+    setBulkGenMsg(false);
+    toast({
+      title: "Geração concluída",
+      description: `${done - failed - skipped} geradas · ${skipped} sem análise · ${failed} erros.`,
+    });
+  }, [selected, leads, filtered, regenerateMessages, toast]);
+
   const handleExportKommo = async () => {
     const { data: settings } = await supabase
       .from("settings")

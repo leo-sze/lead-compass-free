@@ -37,6 +37,10 @@ interface LeadFiltersProps {
   onKommoImportedChange: (value: boolean) => void;
   kommoNotImported: boolean;
   onKommoNotImportedChange: (value: boolean) => void;
+  hasMessage: boolean;
+  onHasMessageChange: (value: boolean) => void;
+  noMessage: boolean;
+  onNoMessageChange: (value: boolean) => void;
   dateFrom: Date | undefined;
   onDateFromChange: (value: Date | undefined) => void;
   dateTo: Date | undefined;
@@ -55,6 +59,8 @@ const LeadFilters = ({
   noDecisor, onNoDecisorChange,
   kommoImported, onKommoImportedChange,
   kommoNotImported, onKommoNotImportedChange,
+  hasMessage, onHasMessageChange,
+  noMessage, onNoMessageChange,
   dateFrom, onDateFromChange,
   dateTo, onDateToChange,
 }: LeadFiltersProps) => {
@@ -175,6 +181,14 @@ const LeadFilters = ({
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={kommoNotImported} onCheckedChange={(v) => { onKommoNotImportedChange(!!v); if (v) onKommoImportedChange(false); }} />
           Não importado Kommo
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={hasMessage} onCheckedChange={(v) => { onHasMessageChange(!!v); if (v) onNoMessageChange(false); }} />
+          Com mensagem
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={noMessage} onCheckedChange={(v) => { onNoMessageChange(!!v); if (v) onHasMessageChange(false); }} />
+          Sem mensagem
         </label>
       </div>
     </div>

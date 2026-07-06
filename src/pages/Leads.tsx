@@ -20,6 +20,7 @@ import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
+import MessageCell from "@/components/leads/MessageCell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -277,6 +278,8 @@ const Leads = () => {
   const [noDecisor, setNoDecisor] = useState(false);
   const [kommoImported, setKommoImported] = useState(false);
   const [kommoNotImported, setKommoNotImported] = useState(false);
+  const [hasMessage, setHasMessage] = useState(false);
+  const [noMessage, setNoMessage] = useState(false);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
@@ -292,6 +295,9 @@ const Leads = () => {
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [pageSize, setPageSize] = useState<number>(30);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [bulkGenMsg, setBulkGenMsg] = useState(false);
+  const [bulkGenProgress, setBulkGenProgress] = useState({ current: 0, total: 0 });
+  const [regenerateMessages, setRegenerateMessages] = useState(false);
   const { toast } = useToast();
 
   // Kommo export state
@@ -395,6 +401,8 @@ const Leads = () => {
     if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
     if (kommoImported) result = result.filter((l) => kommoStatuses[l.id]?.status === "success");
     if (kommoNotImported) result = result.filter((l) => kommoStatuses[l.id]?.status !== "success");
+    if (hasMessage) result = result.filter((l) => !!(l as any).mensagem_personalizada);
+    if (noMessage) result = result.filter((l) => !(l as any).mensagem_personalizada);
     if (dateFrom) {
       const from = new Date(dateFrom);
       from.setHours(0, 0, 0, 0);
@@ -407,7 +415,7 @@ const Leads = () => {
     }
     result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, kommoStatuses, qualityFilter, dateFrom, dateTo]);
+  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, hasMessage, noMessage, kommoStatuses, qualityFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -783,6 +791,57 @@ const Leads = () => {
     toast({ title: "Análise concluída!", description: `${scored} leads analisados pela IA.` });
   }, [selected, leads, filtered, toast]);
 
+  const bulkGenerateMessages = useCallback(async () => {
+    const base = selected.size > 0 ? leads.filter(l => selected.has(l.id)) : filtered;
+    const toGen = regenerateMessages ? base : base.filter(l => !(l as any).mensagem_personalizada);
+
+    if (toGen.length === 0) {
+      toast({ title: "Nenhum lead para gerar", description: regenerateMessages ? "Nenhum lead selecionado." : "Todos os leads já têm mensagem. Marque 'Regenerar' para forçar.", variant: "destructive" });
+      return;
+    }
+
+    setBulkGenMsg(true);
+    setBulkGenProgress({ current: 0, total: toGen.length });
+
+    let done = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const lead of toGen) {
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-personalized-message", {
+          body: { lead_id: lead.id, regenerate: regenerateMessages },
+        });
+        if (error) throw error;
+        if ((data as any)?.error === "sem_analise") {
+          skipped++;
+        } else if ((data as any)?.error) {
+          throw new Error((data as any).message || (data as any).error);
+        } else {
+          const patch = {
+            mensagem_personalizada: data.mensagem,
+            mensagem_pontos_usados: data.pontos_usados,
+            mensagem_status: "gerada",
+            mensagem_gerada_em: new Date().toISOString(),
+          };
+          setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, ...patch } as any : l));
+        }
+      } catch (e) {
+        console.error("bulk gen msg error", lead.nome_empresa, e);
+        failed++;
+      }
+      done++;
+      setBulkGenProgress({ current: done, total: toGen.length });
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
+    setBulkGenMsg(false);
+    toast({
+      title: "Geração concluída",
+      description: `${done - failed - skipped} geradas · ${skipped} sem análise · ${failed} erros.`,
+    });
+  }, [selected, leads, filtered, regenerateMessages, toast]);
+
   const handleExportKommo = async () => {
     const { data: settings } = await supabase
       .from("settings")
@@ -944,6 +1003,25 @@ const Leads = () => {
               <><Sparkles className="h-4 w-4 mr-1" />Executar Análise IA {selected.size > 0 ? `(${selected.size})` : ""}</>
             )}
           </Button>
+          <div className="flex items-center gap-2 border border-accent/30 rounded-md px-2 py-1 bg-accent/5">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={bulkGenerateMessages}
+              disabled={bulkGenMsg || bulkScoring || enriching}
+              className="text-accent hover:bg-accent/10 h-7 px-2"
+            >
+              {bulkGenMsg ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Gerando {bulkGenProgress.current}/{bulkGenProgress.total}</>
+              ) : (
+                <><MessageSquare className="h-4 w-4 mr-1" />Gerar mensagens {selected.size > 0 ? `(${selected.size})` : `(${filtered.length})`}</>
+              )}
+            </Button>
+            <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+              <Checkbox checked={regenerateMessages} onCheckedChange={(v) => setRegenerateMessages(!!v)} className="h-3 w-3" />
+              Regenerar
+            </label>
+          </div>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
@@ -986,6 +1064,10 @@ const Leads = () => {
         onKommoImportedChange={setKommoImported}
         kommoNotImported={kommoNotImported}
         onKommoNotImportedChange={setKommoNotImported}
+        hasMessage={hasMessage}
+        onHasMessageChange={setHasMessage}
+        noMessage={noMessage}
+        onNoMessageChange={setNoMessage}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}
@@ -1051,13 +1133,14 @@ const Leads = () => {
                 <TableHead>Fonte</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Mensagem</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={16} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={17} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>
@@ -1136,6 +1219,12 @@ const Leads = () => {
                             Erro
                           </Badge>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <MessageCell
+                          lead={lead}
+                          onUpdate={(patch) => setLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, ...patch } as any : l))}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-1">

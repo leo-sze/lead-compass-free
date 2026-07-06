@@ -994,6 +994,10 @@ const Leads = () => {
         onKommoImportedChange={setKommoImported}
         kommoNotImported={kommoNotImported}
         onKommoNotImportedChange={setKommoNotImported}
+        hasMessage={hasMessage}
+        onHasMessageChange={setHasMessage}
+        noMessage={noMessage}
+        onNoMessageChange={setNoMessage}
         dateFrom={dateFrom}
         onDateFromChange={setDateFrom}
         dateTo={dateTo}

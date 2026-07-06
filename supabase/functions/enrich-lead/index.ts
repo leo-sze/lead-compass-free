@@ -831,6 +831,10 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // Google Places API key vem da tabela settings (não é um secret)
+    const GOOGLE_PLACES_KEY = await loadGooglePlacesKey();
+    console.log(`[enrich] Google Places key ${GOOGLE_PLACES_KEY ? "OK" : "AUSENTE"}`);
+
     const updates: Record<string, string | null> = {};
     const needsDecisor = !nome_decisor || nome_decisor === "Não identificado";
 

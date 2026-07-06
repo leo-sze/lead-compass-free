@@ -776,7 +776,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { nome_empresa, site, instagram, linkedin, telefone, endereco, nome_decisor, cidade, cnpj } = parsed.data;
+    const {
+      nome_empresa, site, instagram, linkedin, telefone, endereco, nome_decisor, cidade, cnpj,
+      prev_instagram_last_post_days, prev_instagram_profile_is_person,
+      prev_google_rating, prev_google_review_count, prev_google_owner_replied_recently, prev_google_profile_complete,
+    } = parsed.data;
 
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");

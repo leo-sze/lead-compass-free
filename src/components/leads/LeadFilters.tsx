@@ -182,6 +182,14 @@ const LeadFilters = ({
           <Checkbox checked={kommoNotImported} onCheckedChange={(v) => { onKommoNotImportedChange(!!v); if (v) onKommoImportedChange(false); }} />
           Não importado Kommo
         </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={hasMessage} onCheckedChange={(v) => { onHasMessageChange(!!v); if (v) onNoMessageChange(false); }} />
+          Com mensagem
+        </label>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
+          <Checkbox checked={noMessage} onCheckedChange={(v) => { onNoMessageChange(!!v); if (v) onHasMessageChange(false); }} />
+          Sem mensagem
+        </label>
       </div>
     </div>
   );

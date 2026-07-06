@@ -550,6 +550,8 @@ interface GoogleMapsResult {
   google_review_count: number | null;
   google_owner_replied_recently: boolean | null;
   google_profile_complete: boolean | null;
+  status: "success" | "failed" | "not_found";
+  raw: string;
 }
 
 async function scrapeGoogleMaps(
@@ -560,8 +562,10 @@ async function scrapeGoogleMaps(
 ): Promise<GoogleMapsResult> {
   const q = `"${nome}" ${cidade ? `"${cidade}"` : ""} site:google.com/maps OR site:maps.google.com`;
   const text = await searchWeb(q, firecrawlKey);
+  console.log(`[GMaps] search result length=${text?.length ?? 0} query=${q}`);
   if (!text || text.length < 50) {
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    console.log(`[GMaps] FALHA de coleta (search vazio) — query=${q}`);
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text || "" };
   }
   try {
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -593,18 +597,22 @@ async function scrapeGoogleMaps(
         tool_choice: { type: "function", function: { name: "extract_gmaps" } }
       }),
     });
-    if (!aiRes.ok) return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    if (!aiRes.ok) {
+      console.log(`[GMaps] FALHA AI ${aiRes.status}`);
+      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text };
+    }
     const data = await aiRes.json();
     const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    return {
-      google_rating: typeof args.google_rating === "number" ? Math.round(args.google_rating * 10) / 10 : null,
-      google_review_count: typeof args.google_review_count === "number" ? Math.round(args.google_review_count) : null,
-      google_owner_replied_recently: typeof args.google_owner_replied_recently === "boolean" ? args.google_owner_replied_recently : null,
-      google_profile_complete: typeof args.google_profile_complete === "boolean" ? args.google_profile_complete : null,
-    };
+    const rating = typeof args.google_rating === "number" ? Math.round(args.google_rating * 10) / 10 : null;
+    const count = typeof args.google_review_count === "number" ? Math.round(args.google_review_count) : null;
+    const owner = typeof args.google_owner_replied_recently === "boolean" ? args.google_owner_replied_recently : null;
+    const complete = typeof args.google_profile_complete === "boolean" ? args.google_profile_complete : null;
+    const status: "success" | "not_found" = (rating == null && count == null && owner == null && complete == null) ? "not_found" : "success";
+    console.log(`[GMaps] status=${status} rating=${rating} reviews=${count} owner_reply=${owner} complete=${complete}`);
+    return { google_rating: rating, google_review_count: count, google_owner_replied_recently: owner, google_profile_complete: complete, status, raw: text };
   } catch (e) {
     console.error("[GMaps] error:", e);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null };
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text };
   }
 }
 

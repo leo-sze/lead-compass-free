@@ -1221,6 +1221,12 @@ const Leads = () => {
                         )}
                       </TableCell>
                       <TableCell>
+                        <MessageCell
+                          lead={lead}
+                          onUpdate={(patch) => setLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, ...patch } as any : l))}
+                        />
+                      </TableCell>
+                      <TableCell>
                         <div className="flex gap-1">
                           <Button
                             variant="ghost"

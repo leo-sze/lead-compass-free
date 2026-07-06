@@ -278,6 +278,8 @@ const Leads = () => {
   const [noDecisor, setNoDecisor] = useState(false);
   const [kommoImported, setKommoImported] = useState(false);
   const [kommoNotImported, setKommoNotImported] = useState(false);
+  const [hasMessage, setHasMessage] = useState(false);
+  const [noMessage, setNoMessage] = useState(false);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");

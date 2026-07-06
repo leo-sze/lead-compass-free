@@ -1003,6 +1003,25 @@ const Leads = () => {
               <><Sparkles className="h-4 w-4 mr-1" />Executar Análise IA {selected.size > 0 ? `(${selected.size})` : ""}</>
             )}
           </Button>
+          <div className="flex items-center gap-2 border border-accent/30 rounded-md px-2 py-1 bg-accent/5">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={bulkGenerateMessages}
+              disabled={bulkGenMsg || bulkScoring || enriching}
+              className="text-accent hover:bg-accent/10 h-7 px-2"
+            >
+              {bulkGenMsg ? (
+                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Gerando {bulkGenProgress.current}/{bulkGenProgress.total}</>
+              ) : (
+                <><MessageSquare className="h-4 w-4 mr-1" />Gerar mensagens {selected.size > 0 ? `(${selected.size})` : `(${filtered.length})`}</>
+              )}
+            </Button>
+            <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
+              <Checkbox checked={regenerateMessages} onCheckedChange={(v) => setRegenerateMessages(!!v)} className="h-3 w-3" />
+              Regenerar
+            </label>
+          </div>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>

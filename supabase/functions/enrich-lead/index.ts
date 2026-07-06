@@ -1,4 +1,20 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+
+async function loadGooglePlacesKey(): Promise<string | null> {
+  try {
+    const url = Deno.env.get("SUPABASE_URL");
+    const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!url || !svc) return null;
+    const sb = createClient(url, svc);
+    const { data } = await sb.from("settings").select("value").eq("key", "google_places_api_key").maybeSingle();
+    const k = data?.value?.trim();
+    return k && k.length > 10 ? k : null;
+  } catch (e) {
+    console.error("[settings] erro lendo google_places_api_key:", e);
+    return null;
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

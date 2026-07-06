@@ -1140,7 +1140,7 @@ const Leads = () => {
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={16} className="text-center text-muted-foreground py-12">
+                  <TableCell colSpan={17} className="text-center text-muted-foreground py-12">
                     Nenhum lead encontrado.
                   </TableCell>
                 </TableRow>

@@ -933,10 +933,16 @@ Deno.serve(async (req) => {
     const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
 
     const [igData, gmapsData] = await Promise.all([
-      finalIg ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY) : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null }),
+      finalIg
+        ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY)
+        : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found" as const, raw: "" }),
       scrapeGoogleMaps(nome_empresa, finalCid, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
     ]);
 
+    // Log bruto para debug
+    console.log(`[enrich] IG status=${igData.status} raw_len=${igData.raw.length} | GMaps status=${gmapsData.status} raw_len=${gmapsData.raw.length}`);
+
+    // Só grava campos novos quando o scrape retornou algo (preserva valores antigos no DB em caso de falha)
     if (igData.instagram_last_post_days != null) (updates as any).instagram_last_post_days = igData.instagram_last_post_days;
     if (igData.instagram_profile_is_person != null) (updates as any).instagram_profile_is_person = igData.instagram_profile_is_person;
     if (gmapsData.google_rating != null) (updates as any).google_rating = gmapsData.google_rating;
@@ -944,25 +950,61 @@ Deno.serve(async (req) => {
     if (gmapsData.google_owner_replied_recently != null) (updates as any).google_owner_replied_recently = gmapsData.google_owner_replied_recently;
     if (gmapsData.google_profile_complete != null) (updates as any).google_profile_complete = gmapsData.google_profile_complete;
 
+    // Status de coleta (sempre atualizado — diferencia "não tem" de "falhou")
+    (updates as any).instagram_scrape_status = finalIg ? igData.status : "not_found";
+    (updates as any).google_scrape_status = gmapsData.status;
+
+    // Debug: payload bruto do último enrich
+    (updates as any).debug_raw_data = {
+      ts: new Date().toISOString(),
+      instagram: {
+        url: finalIg,
+        status: igData.status,
+        raw_len: igData.raw.length,
+        raw_preview: igData.raw.slice(0, 1500),
+        parsed: {
+          instagram_last_post_days: igData.instagram_last_post_days,
+          instagram_profile_is_person: igData.instagram_profile_is_person,
+        },
+      },
+      google_maps: {
+        query_nome: nome_empresa,
+        query_cidade: finalCid,
+        status: gmapsData.status,
+        raw_len: gmapsData.raw.length,
+        raw_preview: gmapsData.raw.slice(0, 1500),
+        parsed: {
+          google_rating: gmapsData.google_rating,
+          google_review_count: gmapsData.google_review_count,
+          google_owner_replied_recently: gmapsData.google_owner_replied_recently,
+          google_profile_complete: gmapsData.google_profile_complete,
+        },
+      },
+    };
+
     // ── Phone type ──
     const phoneType = detectPhoneType(finalTel);
     if (phoneType) (updates as any).phone_type = phoneType;
 
     // ── Commercial score + tier ──
-    const { commercial_score, tier } = computeCommercialScore({
+    // IMPORTANTE: quando o scrape novo falha (null), usa o valor prévio do lead como fallback.
+    // Isso evita o bug de "DB tem 42 reviews mas score foi computado com null".
+    const scoreInput = {
       phone_type: phoneType,
       nome_decisor: finalDec,
-      instagram_last_post_days: igData.instagram_last_post_days,
+      instagram_last_post_days: igData.instagram_last_post_days ?? prev_instagram_last_post_days ?? null,
       site: finalSite,
-      google_profile_complete: gmapsData.google_profile_complete,
-      google_review_count: gmapsData.google_review_count,
-      google_owner_replied_recently: gmapsData.google_owner_replied_recently,
-      google_rating: gmapsData.google_rating,
-      instagram_profile_is_person: igData.instagram_profile_is_person,
+      google_profile_complete: gmapsData.google_profile_complete ?? prev_google_profile_complete ?? null,
+      google_review_count: gmapsData.google_review_count ?? prev_google_review_count ?? null,
+      google_owner_replied_recently: gmapsData.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? null,
+      google_rating: gmapsData.google_rating ?? prev_google_rating ?? null,
+      instagram_profile_is_person: igData.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? null,
       cnpj: (updates.cnpj as string) || cnpj || null,
       endereco: finalEnd,
       nome_empresa,
-    });
+    };
+    console.log(`[score] input:`, JSON.stringify(scoreInput));
+    const { commercial_score, tier } = computeCommercialScore(scoreInput);
     (updates as any).commercial_score = commercial_score;
     (updates as any).tier = tier;
 

@@ -977,7 +977,7 @@ Deno.serve(async (req) => {
       finalIg
         ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY)
         : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found" as const, raw: "" }),
-      scrapeGoogleMaps(nome_empresa, finalCid, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+      scrapeGoogleMaps(nome_empresa, finalCid, GOOGLE_PLACES_KEY),
     ]);
 
     // Log bruto para debug

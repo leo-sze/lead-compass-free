@@ -15,6 +15,14 @@ const BodySchema = z.object({
   nome_decisor: z.string().nullable().optional(),
   cidade: z.string().nullable().optional(),
   cnpj: z.string().nullable().optional(),
+  // Valores previamente enriquecidos — usados como fallback caso o scrape novo falhe,
+  // evitando que o score seja recalculado com null enquanto o DB mantém o valor antigo.
+  prev_instagram_last_post_days: z.number().nullable().optional(),
+  prev_instagram_profile_is_person: z.boolean().nullable().optional(),
+  prev_google_rating: z.number().nullable().optional(),
+  prev_google_review_count: z.number().nullable().optional(),
+  prev_google_owner_replied_recently: z.boolean().nullable().optional(),
+  prev_google_profile_complete: z.boolean().nullable().optional(),
 });
 
 const CNPJ_REGEX = /\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;

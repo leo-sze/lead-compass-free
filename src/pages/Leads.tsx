@@ -1133,6 +1133,7 @@ const Leads = () => {
                 <TableHead>Fonte</TableHead>
                 <TableHead>Data</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Mensagem</TableHead>
                 <TableHead className="w-24">Ações</TableHead>
               </TableRow>
             </TableHeader>

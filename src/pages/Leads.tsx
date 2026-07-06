@@ -401,6 +401,8 @@ const Leads = () => {
     if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
     if (kommoImported) result = result.filter((l) => kommoStatuses[l.id]?.status === "success");
     if (kommoNotImported) result = result.filter((l) => kommoStatuses[l.id]?.status !== "success");
+    if (hasMessage) result = result.filter((l) => !!(l as any).mensagem_personalizada);
+    if (noMessage) result = result.filter((l) => !(l as any).mensagem_personalizada);
     if (dateFrom) {
       const from = new Date(dateFrom);
       from.setHours(0, 0, 0, 0);

@@ -502,26 +502,57 @@ interface InstagramScrapeResult {
   raw: string;
 }
 
+// Extrai handle da URL do Instagram
+function extractIgHandle(igUrl: string): string | null {
+  const m = igUrl.match(/instagram\.com\/([A-Za-z0-9._]+)/);
+  if (!m) return null;
+  const h = m[1].replace(/\/$/, "").trim();
+  return h && h !== "p" && h !== "reel" && h !== "explore" ? h : null;
+}
+
 async function scrapeInstagram(
   igUrl: string,
   nome: string,
   firecrawlKey: string,
   lovableKey: string
 ): Promise<InstagramScrapeResult> {
-  const md = await scrapeUrl(igUrl, firecrawlKey);
-  console.log(`[IG] raw markdown length=${md?.length ?? 0} url=${igUrl}`);
-  if (!md || md.length < 50) {
-    console.log(`[IG] FALHA de coleta (md vazio/curto) — url=${igUrl}`);
-    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md || "" };
+  const handle = extractIgHandle(igUrl);
+  console.log(`[IG] handle=${handle} url=${igUrl}`);
+
+  // ESTRATÉGIA 1: Scrape direto (raramente funciona pra Instagram, mas tentamos)
+  let md = await scrapeUrl(igUrl, firecrawlKey);
+  let source = "direct";
+  console.log(`[IG] direct scrape len=${md?.length ?? 0}`);
+
+  // Detecta login wall / conteúdo bloqueado
+  const isBlocked = (text: string) => {
+    if (!text || text.length < 50) return true;
+    const t = text.toLowerCase();
+    const markers = ["log in to instagram", "entrar no instagram", "sign up for instagram", "página não disponível", "page isn't available", "content unavailable"];
+    return markers.some(m => t.includes(m)) && text.length < 3000;
+  };
+
+  // ESTRATÉGIA 2: Se direct falhou/bloqueou, busca no Google por site:instagram.com/{handle}
+  // Snippets do Google indexam posts do IG com datas relativas ("3 days ago", "há 2 semanas")
+  if ((!md || isBlocked(md)) && handle) {
+    console.log(`[IG] fallback → Google search site:instagram.com/${handle}`);
+    const googleText = await searchWeb(`site:instagram.com/${handle}`, firecrawlKey);
+    console.log(`[IG] google search len=${googleText?.length ?? 0}`);
+    if (googleText && googleText.length >= 100) {
+      md = googleText;
+      source = "google_search";
+    }
   }
-  // Detecta login wall / conteúdo bloqueado (Instagram frequentemente devolve isso ao Firecrawl)
-  const mdLower = md.toLowerCase();
-  const loginWallMarkers = ["log in to instagram", "entrar no instagram", "sign up for instagram", "página não disponível", "page isn't available", "content unavailable", "esta conta é privada", "this account is private"];
-  const isLoginWall = loginWallMarkers.some(m => mdLower.includes(m)) && md.length < 3000;
-  if (isLoginWall) {
-    console.log(`[IG] LOGIN WALL detectada — url=${igUrl} len=${md.length}`);
+
+  if (!md || md.length < 50) {
+    console.log(`[IG] FALHA em todas as estratégias — handle=${handle}`);
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: "" };
+  }
+  if (source === "direct" && isBlocked(md)) {
+    console.log(`[IG] LOGIN WALL sem fallback disponível`);
     return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md.slice(0, 800) };
   }
+  console.log(`[IG] processando via source=${source} len=${md.length}`);
   try {
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -529,8 +560,21 @@ async function scrapeInstagram(
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: `Você receberá o conteúdo bruto de um perfil de Instagram (${nome}). Analise e responda 2 perguntas: 1) Quantos dias se passaram desde o último post (com base em datas/relatos como "há 3 dias", "1 semana atrás", "Nov 2024"). Data atual: ${new Date().toISOString().slice(0,10)}. Se não conseguir inferir, retorne null. 2) A foto de perfil/identidade visual parece ser uma pessoa física real (rosto humano, nome pessoal, bio em primeira pessoa "eu sou...") ou um logo/produto/marca? Responda apenas true (pessoa) ou false (marca). Se inconclusivo, null.` },
-          { role: "user", content: md.slice(0, 6000) }
+          { role: "system", content: `Você receberá conteúdo público sobre o perfil de Instagram "${nome}" (pode ser o perfil bruto OU snippets de resultados do Google indexando posts do perfil). Data atual: ${new Date().toISOString().slice(0,10)}.
+
+Sua tarefa: extrair 2 informações.
+
+1) instagram_last_post_days — quantos dias faz desde o post MAIS RECENTE mencionado.
+   • Procure datas relativas em PT/EN: "há 3 dias", "3 dias atrás", "1 semana atrás", "há 2 meses", "3 days ago", "2 weeks ago", "1 month ago".
+   • Procure datas absolutas: "12 de nov", "Nov 12, 2025", "12/11/2025".
+   • Se houver VÁRIAS datas, use a MENOR (mais recente).
+   • Converta pra dias: 1 semana = 7, 1 mês = 30, 1 ano = 365.
+   • Se NÃO houver nenhuma data de post no conteúdo, retorne null. NUNCA chute.
+
+2) instagram_profile_is_person — a identidade parece ser pessoa física (nome pessoal, "eu sou...", rosto humano) ou marca/logo/produto? true = pessoa, false = marca, null = inconclusivo.
+
+Regra crítica: se o conteúdo for uma tela de login, "content unavailable", ou não mencionar nenhum post datado, retorne AMBOS os campos como null. É melhor null do que inventar.` },
+          { role: "user", content: md.slice(0, 8000) }
         ],
         tools: [{
           type: "function",

@@ -295,6 +295,9 @@ const Leads = () => {
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [pageSize, setPageSize] = useState<number>(30);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [bulkGenMsg, setBulkGenMsg] = useState(false);
+  const [bulkGenProgress, setBulkGenProgress] = useState({ current: 0, total: 0 });
+  const [regenerateMessages, setRegenerateMessages] = useState(false);
   const { toast } = useToast();
 
   // Kommo export state

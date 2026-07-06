@@ -498,6 +498,14 @@ async function scrapeInstagram(
     console.log(`[IG] FALHA de coleta (md vazio/curto) — url=${igUrl}`);
     return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md || "" };
   }
+  // Detecta login wall / conteúdo bloqueado (Instagram frequentemente devolve isso ao Firecrawl)
+  const mdLower = md.toLowerCase();
+  const loginWallMarkers = ["log in to instagram", "entrar no instagram", "sign up for instagram", "página não disponível", "page isn't available", "content unavailable", "esta conta é privada", "this account is private"];
+  const isLoginWall = loginWallMarkers.some(m => mdLower.includes(m)) && md.length < 3000;
+  if (isLoginWall) {
+    console.log(`[IG] LOGIN WALL detectada — url=${igUrl} len=${md.length}`);
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md.slice(0, 800) };
+  }
   try {
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

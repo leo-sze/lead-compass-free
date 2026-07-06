@@ -44,16 +44,19 @@ export type Database = {
           cnpj: string | null
           commercial_score: number | null
           created_at: string
+          debug_raw_data: Json | null
           endereco: string | null
           fonte: string | null
           google_owner_replied_recently: boolean | null
           google_profile_complete: boolean | null
           google_rating: number | null
           google_review_count: number | null
+          google_scrape_status: string | null
           id: string
           instagram: string | null
           instagram_last_post_days: number | null
           instagram_profile_is_person: boolean | null
+          instagram_scrape_status: string | null
           justificativa: string | null
           lead_quality: string | null
           linkedin: string | null
@@ -80,16 +83,19 @@ export type Database = {
           cnpj?: string | null
           commercial_score?: number | null
           created_at?: string
+          debug_raw_data?: Json | null
           endereco?: string | null
           fonte?: string | null
           google_owner_replied_recently?: boolean | null
           google_profile_complete?: boolean | null
           google_rating?: number | null
           google_review_count?: number | null
+          google_scrape_status?: string | null
           id?: string
           instagram?: string | null
           instagram_last_post_days?: number | null
           instagram_profile_is_person?: boolean | null
+          instagram_scrape_status?: string | null
           justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
@@ -116,16 +122,19 @@ export type Database = {
           cnpj?: string | null
           commercial_score?: number | null
           created_at?: string
+          debug_raw_data?: Json | null
           endereco?: string | null
           fonte?: string | null
           google_owner_replied_recently?: boolean | null
           google_profile_complete?: boolean | null
           google_rating?: number | null
           google_review_count?: number | null
+          google_scrape_status?: string | null
           id?: string
           instagram?: string | null
           instagram_last_post_days?: number | null
           instagram_profile_is_person?: boolean | null
+          instagram_scrape_status?: string | null
           justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null

@@ -482,6 +482,8 @@ function detectPhoneType(phone: string | null): "celular" | "fixo" | null {
 interface InstagramScrapeResult {
   instagram_last_post_days: number | null;
   instagram_profile_is_person: boolean | null;
+  status: "success" | "failed" | "not_found";
+  raw: string;
 }
 
 async function scrapeInstagram(
@@ -491,8 +493,11 @@ async function scrapeInstagram(
   lovableKey: string
 ): Promise<InstagramScrapeResult> {
   const md = await scrapeUrl(igUrl, firecrawlKey);
-  if (!md || md.length < 50) return { instagram_last_post_days: null, instagram_profile_is_person: null };
-
+  console.log(`[IG] raw markdown length=${md?.length ?? 0} url=${igUrl}`);
+  if (!md || md.length < 50) {
+    console.log(`[IG] FALHA de coleta (md vazio/curto) — url=${igUrl}`);
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md || "" };
+  }
   try {
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -521,16 +526,21 @@ async function scrapeInstagram(
         tool_choice: { type: "function", function: { name: "extract_ig" } }
       }),
     });
-    if (!aiRes.ok) return { instagram_last_post_days: null, instagram_profile_is_person: null };
+    if (!aiRes.ok) {
+      console.log(`[IG] FALHA AI ${aiRes.status}`);
+      return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md };
+    }
     const data = await aiRes.json();
     const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    return {
-      instagram_last_post_days: typeof args.instagram_last_post_days === "number" ? Math.max(0, Math.round(args.instagram_last_post_days)) : null,
-      instagram_profile_is_person: typeof args.instagram_profile_is_person === "boolean" ? args.instagram_profile_is_person : null,
-    };
+    const days = typeof args.instagram_last_post_days === "number" ? Math.max(0, Math.round(args.instagram_last_post_days)) : null;
+    const isPerson = typeof args.instagram_profile_is_person === "boolean" ? args.instagram_profile_is_person : null;
+    // Se AI retornou tudo null e o markdown é curto/vazio, marcar como not_found (perfil privado / login wall)
+    const status: "success" | "not_found" = (days == null && isPerson == null) ? "not_found" : "success";
+    console.log(`[IG] status=${status} last_post_days=${days} is_person=${isPerson}`);
+    return { instagram_last_post_days: days, instagram_profile_is_person: isPerson, status, raw: md };
   } catch (e) {
     console.error("[IG] error:", e);
-    return { instagram_last_post_days: null, instagram_profile_is_person: null };
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md };
   }
 }
 

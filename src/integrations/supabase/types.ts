@@ -57,6 +57,10 @@ export type Database = {
           justificativa: string | null
           lead_quality: string | null
           linkedin: string | null
+          mensagem_gerada_em: string | null
+          mensagem_personalizada: string | null
+          mensagem_pontos_usados: Json | null
+          mensagem_status: string | null
           nome_decisor: string | null
           nome_empresa: string
           phone_type: string | null
@@ -89,6 +93,10 @@ export type Database = {
           justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
+          mensagem_gerada_em?: string | null
+          mensagem_personalizada?: string | null
+          mensagem_pontos_usados?: Json | null
+          mensagem_status?: string | null
           nome_decisor?: string | null
           nome_empresa: string
           phone_type?: string | null
@@ -121,6 +129,10 @@ export type Database = {
           justificativa?: string | null
           lead_quality?: string | null
           linkedin?: string | null
+          mensagem_gerada_em?: string | null
+          mensagem_personalizada?: string | null
+          mensagem_pontos_usados?: Json | null
+          mensagem_status?: string | null
           nome_decisor?: string | null
           nome_empresa?: string
           phone_type?: string | null

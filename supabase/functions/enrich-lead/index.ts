@@ -557,62 +557,75 @@ interface GoogleMapsResult {
 async function scrapeGoogleMaps(
   nome: string,
   cidade: string | null,
-  firecrawlKey: string,
-  lovableKey: string
+  googlePlacesKey: string | null,
 ): Promise<GoogleMapsResult> {
-  const q = `"${nome}" ${cidade ? `"${cidade}"` : ""} site:google.com/maps OR site:maps.google.com`;
-  const text = await searchWeb(q, firecrawlKey);
-  console.log(`[GMaps] search result length=${text?.length ?? 0} query=${q}`);
-  if (!text || text.length < 50) {
-    console.log(`[GMaps] FALHA de coleta (search vazio) — query=${q}`);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text || "" };
+  if (!googlePlacesKey) {
+    console.log(`[GMaps] SEM Google Places API key — pulando`);
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: "no_api_key" };
   }
+  const textQuery = `${nome}${cidade ? ` ${cidade}` : ""}`;
+  const fieldMask = [
+    "places.id",
+    "places.displayName",
+    "places.formattedAddress",
+    "places.rating",
+    "places.userRatingCount",
+    "places.regularOpeningHours",
+    "places.photos",
+    "places.primaryTypeDisplayName",
+    "places.businessStatus",
+    "places.reviews",
+  ].join(",");
   try {
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: `Você receberá conteúdo extraído do perfil do Google Maps da empresa "${nome}"${cidade ? ` em ${cidade}` : ""}. Extraia: (1) nota média (1.0-5.0), (2) total de avaliações, (3) se há respostas do PROPRIETÁRIO ("Resposta do proprietário"/"Owner reply") em alguma das avaliações recentes mostradas (boolean), (4) se o perfil parece completo: tem foto, horário de funcionamento E descrição/categoria preenchidos (boolean). Use null se não conseguir determinar.` },
-          { role: "user", content: text.slice(0, 8000) }
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "extract_gmaps",
-            parameters: {
-              type: "object",
-              properties: {
-                google_rating: { type: "number", nullable: true },
-                google_review_count: { type: "number", nullable: true },
-                google_owner_replied_recently: { type: "boolean", nullable: true },
-                google_profile_complete: { type: "boolean", nullable: true },
-              },
-              required: ["google_rating","google_review_count","google_owner_replied_recently","google_profile_complete"],
-              additionalProperties: false,
-            }
-          }
-        }],
-        tool_choice: { type: "function", function: { name: "extract_gmaps" } }
-      }),
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": googlePlacesKey,
+        "X-Goog-FieldMask": fieldMask,
+      },
+      body: JSON.stringify({ textQuery, languageCode: "pt-BR", regionCode: "BR", pageSize: 1 }),
     });
-    if (!aiRes.ok) {
-      console.log(`[GMaps] FALHA AI ${aiRes.status}`);
-      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text };
+    const raw = await res.text();
+    console.log(`[GMaps] Places API status=${res.status} len=${raw.length} query=${textQuery}`);
+    if (!res.ok) {
+      console.log(`[GMaps] FALHA Places API ${res.status} body=${raw.slice(0, 300)}`);
+      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw };
     }
-    const data = await aiRes.json();
-    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    const rating = typeof args.google_rating === "number" ? Math.round(args.google_rating * 10) / 10 : null;
-    const count = typeof args.google_review_count === "number" ? Math.round(args.google_review_count) : null;
-    const owner = typeof args.google_owner_replied_recently === "boolean" ? args.google_owner_replied_recently : null;
-    const complete = typeof args.google_profile_complete === "boolean" ? args.google_profile_complete : null;
-    const status: "success" | "not_found" = (rating == null && count == null && owner == null && complete == null) ? "not_found" : "success";
-    console.log(`[GMaps] status=${status} rating=${rating} reviews=${count} owner_reply=${owner} complete=${complete}`);
-    return { google_rating: rating, google_review_count: count, google_owner_replied_recently: owner, google_profile_complete: complete, status, raw: text };
+    const data = JSON.parse(raw);
+    const place = data.places?.[0];
+    if (!place) {
+      console.log(`[GMaps] NOT_FOUND — nenhum lugar para "${textQuery}"`);
+      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "not_found", raw };
+    }
+    const rating = typeof place.rating === "number" ? Math.round(place.rating * 10) / 10 : null;
+    const count = typeof place.userRatingCount === "number" ? place.userRatingCount : null;
+    const hasPhotos = Array.isArray(place.photos) && place.photos.length > 0;
+    const hasHours = !!place.regularOpeningHours;
+    const hasCategory = !!place.primaryTypeDisplayName;
+    const complete = hasPhotos && hasHours && hasCategory;
+
+    // Owner reply: Places API não expõe replies diretamente. Marcamos true se houver
+    // qualquer review recente (< 90 dias) — heurística conservadora; null se não houver reviews.
+    let ownerReplied: boolean | null = null;
+    if (Array.isArray(place.reviews) && place.reviews.length > 0) {
+      // Fica null (unknown) — não temos sinal confiável via Places API.
+      // Melhor null do que falso positivo.
+      ownerReplied = null;
+    }
+
+    console.log(`[GMaps] SUCCESS rating=${rating} reviews=${count} complete=${complete} (photos=${hasPhotos} hours=${hasHours} cat=${hasCategory})`);
+    return {
+      google_rating: rating,
+      google_review_count: count,
+      google_owner_replied_recently: ownerReplied,
+      google_profile_complete: complete,
+      status: "success",
+      raw: raw.slice(0, 4000),
+    };
   } catch (e) {
     console.error("[GMaps] error:", e);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: text };
+    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: String(e) };
   }
 }
 

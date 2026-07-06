@@ -59,6 +59,8 @@ const LeadFilters = ({
   noDecisor, onNoDecisorChange,
   kommoImported, onKommoImportedChange,
   kommoNotImported, onKommoNotImportedChange,
+  hasMessage, onHasMessageChange,
+  noMessage, onNoMessageChange,
   dateFrom, onDateFromChange,
   dateTo, onDateToChange,
 }: LeadFiltersProps) => {

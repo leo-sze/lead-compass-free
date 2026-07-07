@@ -283,9 +283,6 @@ const Leads = () => {
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
-  const [whatsappTemplate, setWhatsappTemplate] = useState(
-    "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
-  );
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
   const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
@@ -317,7 +314,6 @@ const Leads = () => {
 
   useEffect(() => {
     fetchLeads();
-    fetchTemplate();
     fetchKommoSubdomain();
   }, []);
 
@@ -343,10 +339,7 @@ const Leads = () => {
   };
 
 
-  const fetchTemplate = async () => {
-    const { data } = await supabase.from("settings").select("value").eq("key", "whatsapp_template").maybeSingle();
-    if (data?.value) setWhatsappTemplate(data.value);
-  };
+
 
   const fetchKommoSubdomain = async () => {
     const { data } = await supabase.from("settings").select("value").eq("key", "kommo_subdomain").maybeSingle();

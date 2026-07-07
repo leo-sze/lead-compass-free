@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
 
         // Buscar lead no Kommo pelo telefone.
         const searchResp = await fetch(
-          `${baseUrl}/api/v4/leads?query=${encodeURIComponent(phone)}&with=contacts&limit=10`,
+          `${baseUrl}/api/v4/leads?query=${encodeURIComponent(phone)}&with=contacts,tags&limit=10`,
           { headers: authHeaders },
         );
         if (searchResp.status === 401 || searchResp.status === 403) {

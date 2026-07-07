@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Save, Key, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle, MessageCircle } from "lucide-react";
+import { Save, Key, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -18,9 +18,6 @@ const SettingsPage = () => {
   const [kommoToken, setKommoToken] = useState("");
   const [showKommoToken, setShowKommoToken] = useState(false);
   const [kommoPipelineId, setKommoPipelineId] = useState("");
-  const [whatsappToken, setWhatsappToken] = useState("");
-  const [showWhatsappToken, setShowWhatsappToken] = useState(false);
-  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState("");
   const [b2bCookie, setB2bCookie] = useState("");
   const [showB2bCookie, setShowB2bCookie] = useState(false);
   const [b2bLastValidation, setB2bLastValidation] = useState<string | null>(null);
@@ -45,8 +42,6 @@ const SettingsPage = () => {
         if (row.key === "kommo_subdomain") setKommoSubdomain(row.value || "");
         if (row.key === "kommo_api_token") setKommoToken(row.value || "");
         if (row.key === "kommo_pipeline_id") setKommoPipelineId(row.value || "");
-        if (row.key === "whatsapp_access_token") setWhatsappToken(row.value || "");
-        if (row.key === "whatsapp_phone_number_id") setWhatsappPhoneNumberId(row.value || "");
         if (row.key === "b2bleads_cookie") {
           setB2bCookie(row.value || "");
           if (row.value) setB2bValid(true);
@@ -75,8 +70,6 @@ const SettingsPage = () => {
       await saveSetting("kommo_subdomain", kommoSubdomain);
       await saveSetting("kommo_api_token", kommoToken);
       await saveSetting("kommo_pipeline_id", kommoPipelineId);
-      await saveSetting("whatsapp_access_token", whatsappToken);
-      await saveSetting("whatsapp_phone_number_id", whatsappPhoneNumberId);
       await saveSetting("b2bleads_cookie", b2bCookie);
       toast({ title: "Configurações salvas!" });
     } catch {
@@ -170,50 +163,6 @@ const SettingsPage = () => {
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-border/50 bg-card/80">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-primary" />
-            WhatsApp Direto
-          </CardTitle>
-          <CardDescription>
-            Envia mensagens diretamente pela API oficial do WhatsApp, sem nota, campo, tag ou Salesbot.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Access Token WhatsApp</label>
-            <div className="relative">
-              <Input
-                type={showWhatsappToken ? "text" : "password"}
-                placeholder="Cole o token do WhatsApp Cloud API..."
-                value={whatsappToken}
-                onChange={(e) => setWhatsappToken(e.target.value)}
-                className="pr-10 bg-secondary/50 font-mono"
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                onClick={() => setShowWhatsappToken(!showWhatsappToken)}
-              >
-                {showWhatsappToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </Button>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Phone Number ID</label>
-            <Input
-              placeholder="Ex: 123456789012345"
-              value={whatsappPhoneNumberId}
-              onChange={(e) => setWhatsappPhoneNumberId(e.target.value)}
-              className="bg-secondary/50 font-mono"
-            />
           </div>
         </CardContent>
       </Card>

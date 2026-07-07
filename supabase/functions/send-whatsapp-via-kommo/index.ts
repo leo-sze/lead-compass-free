@@ -2,8 +2,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 type InLead = {
   id: string;
   telefone?: string | null;
@@ -32,25 +30,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
     // Envio direto pelo WhatsApp Cloud API. Não usa Kommo, nota, campo, tag nem Salesbot.
     const apiVersion = Deno.env.get("WHATSAPP_API_VERSION") || "v23.0";
-    let whatsappToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "";
-    let phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "";
-
-    if (!whatsappToken || !phoneNumberId) {
-      const { data: settings } = await supabase
-        .from("settings").select("key, value")
-        .in("key", ["whatsapp_access_token", "whatsapp_phone_number_id"]);
-      const map: Record<string, string> = {};
-      for (const s of settings || []) if (s.value) map[s.key] = s.value;
-      if (!whatsappToken) whatsappToken = map["whatsapp_access_token"] || "";
-      if (!phoneNumberId) phoneNumberId = map["whatsapp_phone_number_id"] || "";
-    }
+    const whatsappToken = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "";
+    const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID") || "";
 
     if (!whatsappToken || !phoneNumberId) {
       return new Response(JSON.stringify({

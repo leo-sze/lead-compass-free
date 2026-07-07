@@ -124,25 +124,34 @@ Deno.serve(async (req) => {
           continue;
         }
 
+        // Tags atuais do lead (para mesclar sem sobrescrever)
+        const existingTags: Array<{ id?: number; name: string }> =
+          (kommoLead?._embedded?.tags || []).map((t: any) => ({ id: t.id, name: t.name }));
+        const alreadyTagged = existingTags.some(
+          (t) => (t.name || "").trim().toLowerCase() === TAG_NAME.toLowerCase(),
+        );
+        const mergedTags = alreadyTagged
+          ? existingTags
+          : [...existingTags, { name: TAG_NAME }];
+
         if (fieldInfo.entity === "leads") {
-          // PATCH lead: tag + campo mensagem_ia
-          const patchResp = await fetch(`${baseUrl}/api/v4/leads/${kommoLeadId}`, {
+          // 1) PATCH campo mensagem_ia no lead
+          const patchField = await fetch(`${baseUrl}/api/v4/leads/${kommoLeadId}`, {
             method: "PATCH",
             headers: authHeaders,
             body: JSON.stringify({
               custom_fields_values: [
                 { field_id: fieldInfo.id, values: [{ value: message }] },
               ],
-              _embedded: { tags_to_add: [{ name: TAG_NAME }] },
             }),
           });
-          if (!patchResp.ok) {
-            const t = await patchResp.text();
-            results.push({ id: lead.id, status: "error", error: `PATCH lead HTTP ${patchResp.status}: ${t.slice(0, 240)}` });
+          if (!patchField.ok) {
+            const t = await patchField.text();
+            results.push({ id: lead.id, status: "error", error: `PATCH campo HTTP ${patchField.status}: ${t.slice(0, 240)}` });
             continue;
           }
         } else {
-          // Campo está em contacts: atualizar contato principal + tag no lead
+          // Campo está em contacts: atualizar contato principal
           const contactId = kommoLead?._embedded?.contacts?.find((c: any) => c.is_main)?.id
             || kommoLead?._embedded?.contacts?.[0]?.id;
           if (!contactId) {
@@ -163,17 +172,31 @@ Deno.serve(async (req) => {
             results.push({ id: lead.id, status: "error", error: `PATCH contact HTTP ${patchContact.status}: ${t.slice(0, 240)}` });
             continue;
           }
-          const patchLead = await fetch(`${baseUrl}/api/v4/leads/${kommoLeadId}`, {
+        }
+
+        // 2) PATCH tags no lead em request separada, mesclando com as existentes
+        if (!alreadyTagged) {
+          const patchTags = await fetch(`${baseUrl}/api/v4/leads/${kommoLeadId}`, {
             method: "PATCH",
             headers: authHeaders,
-            body: JSON.stringify({ _embedded: { tags_to_add: [{ name: TAG_NAME }] } }),
+            body: JSON.stringify({ _embedded: { tags: mergedTags } }),
           });
-          if (!patchLead.ok) {
-            const t = await patchLead.text();
-            results.push({ id: lead.id, status: "error", error: `PATCH tag HTTP ${patchLead.status}: ${t.slice(0, 240)}` });
-            continue;
+          if (!patchTags.ok) {
+            const t = await patchTags.text();
+            // Fallback: tentar tags_to_add
+            const retry = await fetch(`${baseUrl}/api/v4/leads/${kommoLeadId}`, {
+              method: "PATCH",
+              headers: authHeaders,
+              body: JSON.stringify({ _embedded: { tags_to_add: [{ name: TAG_NAME }] } }),
+            });
+            if (!retry.ok) {
+              const t2 = await retry.text();
+              results.push({ id: lead.id, status: "error", error: `PATCH tag HTTP ${patchTags.status}: ${t.slice(0, 160)} | retry ${retry.status}: ${t2.slice(0, 160)}` });
+              continue;
+            }
           }
         }
+
 
         results.push({ id: lead.id, status: "success" });
       } catch (err) {

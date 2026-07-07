@@ -38,33 +38,6 @@ export type Database = {
         }
         Relationships: []
       }
-      instagram_accounts: {
-        Row: {
-          created_at: string
-          id: string
-          last_checked_at: string | null
-          last_post_date: string | null
-          status: string
-          username: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          last_checked_at?: string | null
-          last_post_date?: string | null
-          status?: string
-          username: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          last_checked_at?: string | null
-          last_post_date?: string | null
-          status?: string
-          username?: string
-        }
-        Relationships: []
-      }
       leads: {
         Row: {
           cidade: string | null

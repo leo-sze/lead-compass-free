@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Save, Key, MessageCircle, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, Key, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -110,7 +110,7 @@ const SettingsPage = () => {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Configurações</h1>
-        <p className="text-muted-foreground text-sm">Configure sua API de busca e mensagem do WhatsApp</p>
+        <p className="text-muted-foreground text-sm">Configure sua API de busca e integração Kommo</p>
       </div>
 
       <Card className="border-border/50 bg-card/80">

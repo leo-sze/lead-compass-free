@@ -118,7 +118,7 @@ Deno.serve(async (req) => {
         }
 
         // 2) Disparar Salesbot via bot_id
-        const botResp = await fetch(`${base}/api/v4/salesbot/run`, {
+        const botResp = await fetch(`${base}/api/v2/salesbot/run`, {
           method: "POST", headers: authHeaders,
           body: JSON.stringify([{ bot_id: botId, entity_type: "leads", entity_id: kommoLeadId }]),
         });

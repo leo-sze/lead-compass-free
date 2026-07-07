@@ -517,7 +517,7 @@ const Leads = () => {
       });
       return;
     }
-    toast({ title: "Enviando via Kommo..." });
+    toast({ title: "Enviando WhatsApp..." });
     const { data, error } = await supabase.functions.invoke("send-whatsapp-via-kommo", {
       body: { leads: [{ id: lead.id, telefone: lead.telefone, nome_empresa: lead.nome_empresa, mensagem_personalizada: lead.mensagem_personalizada }] },
     });
@@ -527,7 +527,7 @@ const Leads = () => {
     }
     const r = (data as any)?.results?.[0];
     if (r?.status === "success") {
-      toast({ title: "Mensagem disparada via Kommo" });
+      toast({ title: "Mensagem enviada no WhatsApp" });
       setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, mensagem_status: "enviada" } : l)));
     } else {
       toast({ title: "Não enviado", description: r?.error || "Erro desconhecido", variant: "destructive" });
@@ -1251,7 +1251,7 @@ const Leads = () => {
                             size="icon"
                             onClick={() => openWhatsApp(lead)}
                             className="text-green-400 hover:text-green-300 hover:bg-green-400/10 h-8 w-8"
-                            title="Abrir WhatsApp"
+                            title="Enviar WhatsApp"
                           >
                             <MessageCircle className="h-4 w-4" />
                           </Button>

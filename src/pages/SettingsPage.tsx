@@ -110,7 +110,7 @@ const SettingsPage = () => {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Configurações</h1>
-        <p className="text-muted-foreground text-sm">Configure sua API de busca e integração Kommo</p>
+        <p className="text-muted-foreground text-sm">Configure sua API de busca e integrações</p>
       </div>
 
       <Card className="border-border/50 bg-card/80">

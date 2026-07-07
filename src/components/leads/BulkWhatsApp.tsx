@@ -56,7 +56,7 @@ const BulkWhatsApp = ({ leads, onSent }: BulkWhatsAppProps) => {
       const skipped = results.filter((r) => r.status === "skipped");
 
       toast({
-        title: `${ok.length} mensagens disparadas via Kommo`,
+        title: `${ok.length} mensagens enviadas no WhatsApp`,
         description: [
           err.length ? `${err.length} com erro` : null,
           skipped.length ? `${skipped.length} puladas` : null,
@@ -69,7 +69,7 @@ const BulkWhatsApp = ({ leads, onSent }: BulkWhatsAppProps) => {
       if (ok.length && onSent) onSent(ok.map((r) => r.id));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      toast({ title: "Falha ao enviar via Kommo", description: msg, variant: "destructive" });
+      toast({ title: "Falha ao enviar WhatsApp", description: msg, variant: "destructive" });
     } finally {
       setSending(false);
       setTimeout(() => setProgress(0), 800);
@@ -90,12 +90,12 @@ const BulkWhatsApp = ({ leads, onSent }: BulkWhatsAppProps) => {
         ) : (
           <MessageCircle className="h-4 w-4 mr-1" />
         )}
-        Enviar WhatsApp via Kommo ({eligible.length})
+        Enviar WhatsApp ({eligible.length})
       </Button>
       {sending && (
         <div className="space-y-1">
           <Progress value={progress} className="h-2" />
-          <p className="text-xs text-muted-foreground">Disparando via Kommo...</p>
+          <p className="text-xs text-muted-foreground">Enviando WhatsApp...</p>
         </div>
       )}
     </div>

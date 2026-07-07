@@ -1,4 +1,4 @@
-import { Search, Globe, Linkedin, Users, Settings, Zap, Phone, PhoneCall, Instagram } from "lucide-react";
+import { Search, Globe, Linkedin, Users, Settings, Zap, Phone, PhoneCall } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -20,7 +20,6 @@ const items = [
   { title: "Leads", url: "/leads", icon: Users },
   { title: "Encontrar Contatos", url: "/find-contacts", icon: Phone },
   { title: "Buscar por Telefone", url: "/phone-lookup", icon: PhoneCall },
-  { title: "Monitor Instagram", url: "/instagram-monitor", icon: Instagram },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 

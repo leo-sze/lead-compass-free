@@ -512,105 +512,72 @@ function extractIgHandle(igUrl: string): string | null {
 
 async function scrapeInstagram(
   igUrl: string,
-  nome: string,
-  firecrawlKey: string,
-  lovableKey: string
+  _nome: string,
+  _firecrawlKey: string,
+  _lovableKey: string
 ): Promise<InstagramScrapeResult> {
   const handle = extractIgHandle(igUrl);
   console.log(`[IG] handle=${handle} url=${igUrl}`);
-
-  // ESTRATÉGIA 1: Scrape direto (raramente funciona pra Instagram, mas tentamos)
-  let md = await scrapeUrl(igUrl, firecrawlKey);
-  let source = "direct";
-  console.log(`[IG] direct scrape len=${md?.length ?? 0}`);
-
-  // Detecta login wall / conteúdo bloqueado
-  const isBlocked = (text: string) => {
-    if (!text || text.length < 50) return true;
-    const t = text.toLowerCase();
-    const markers = ["log in to instagram", "entrar no instagram", "sign up for instagram", "página não disponível", "page isn't available", "content unavailable"];
-    return markers.some(m => t.includes(m)) && text.length < 3000;
-  };
-
-  // ESTRATÉGIA 2: Se direct falhou/bloqueou, busca no Google por site:instagram.com/{handle}
-  // Snippets do Google indexam posts do IG com datas relativas ("3 days ago", "há 2 semanas")
-  if ((!md || isBlocked(md)) && handle) {
-    console.log(`[IG] fallback → Google search site:instagram.com/${handle}`);
-    const googleText = await searchWeb(`site:instagram.com/${handle}`, firecrawlKey);
-    console.log(`[IG] google search len=${googleText?.length ?? 0}`);
-    if (googleText && googleText.length >= 100) {
-      md = googleText;
-      source = "google_search";
-    }
+  if (!handle) {
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found", raw: "" };
   }
 
-  if (!md || md.length < 50) {
-    console.log(`[IG] FALHA em todas as estratégias — handle=${handle}`);
+  const apifyKey = Deno.env.get("APIFY_API_KEY");
+  if (!apifyKey) {
+    console.warn("[IG] APIFY_API_KEY ausente — pulando");
     return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: "" };
   }
-  if (source === "direct" && isBlocked(md)) {
-    console.log(`[IG] LOGIN WALL sem fallback disponível`);
-    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md.slice(0, 800) };
-  }
-  console.log(`[IG] processando via source=${source} len=${md.length}`);
+
   try {
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const url = `https://api.apify.com/v2/acts/apify~instagram-profile-scraper/run-sync-get-dataset-items?token=${apifyKey}`;
+    const res = await fetch(url, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: `Você receberá conteúdo público sobre o perfil de Instagram "${nome}" (pode ser o perfil bruto OU snippets de resultados do Google indexando posts do perfil). Data atual: ${new Date().toISOString().slice(0,10)}.
-
-Sua tarefa: extrair 2 informações.
-
-1) instagram_last_post_days — quantos dias faz desde o post MAIS RECENTE mencionado.
-   • Procure datas relativas em PT/EN: "há 3 dias", "3 dias atrás", "1 semana atrás", "há 2 meses", "3 days ago", "2 weeks ago", "1 month ago".
-   • Procure datas absolutas: "12 de nov", "Nov 12, 2025", "12/11/2025".
-   • Se houver VÁRIAS datas, use a MENOR (mais recente).
-   • Converta pra dias: 1 semana = 7, 1 mês = 30, 1 ano = 365.
-   • Se NÃO houver nenhuma data de post no conteúdo, retorne null. NUNCA chute.
-
-2) instagram_profile_is_person — a identidade parece ser pessoa física (nome pessoal, "eu sou...", rosto humano) ou marca/logo/produto? true = pessoa, false = marca, null = inconclusivo.
-
-Regra crítica: se o conteúdo for uma tela de login, "content unavailable", ou não mencionar nenhum post datado, retorne AMBOS os campos como null. É melhor null do que inventar.` },
-          { role: "user", content: md.slice(0, 8000) }
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "extract_ig",
-            parameters: {
-              type: "object",
-              properties: {
-                instagram_last_post_days: { type: "number", nullable: true },
-                instagram_profile_is_person: { type: "boolean", nullable: true },
-              },
-              required: ["instagram_last_post_days", "instagram_profile_is_person"],
-              additionalProperties: false,
-            }
-          }
-        }],
-        tool_choice: { type: "function", function: { name: "extract_ig" } }
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usernames: [handle], resultsLimit: 5 }),
     });
-    if (!aiRes.ok) {
-      console.log(`[IG] FALHA AI ${aiRes.status}`);
-      return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md };
+    if (!res.ok) {
+      const t = await res.text();
+      console.error(`[IG] Apify HTTP ${res.status}: ${t.slice(0, 200)}`);
+      return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: t.slice(0, 400) };
     }
-    const data = await aiRes.json();
-    const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
-    const days = typeof args.instagram_last_post_days === "number" ? Math.max(0, Math.round(args.instagram_last_post_days)) : null;
-    const isPerson = typeof args.instagram_profile_is_person === "boolean" ? args.instagram_profile_is_person : null;
-    // Se AI retornou tudo null e o markdown é curto/vazio, marcar como not_found (perfil privado / login wall)
-    const status: "success" | "not_found" = (days == null && isPerson == null) ? "not_found" : "success";
-    console.log(`[IG] status=${status} last_post_days=${days} is_person=${isPerson}`);
-    return { instagram_last_post_days: days, instagram_profile_is_person: isPerson, status, raw: md };
+    const items = await res.json();
+    if (!Array.isArray(items) || items.length === 0) {
+      console.log(`[IG] Apify sem items p/ @${handle}`);
+      return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found", raw: "" };
+    }
+    const profile = items[0];
+    const posts: any[] = profile.latestPosts || profile.posts || [];
+    let mostRecent: Date | null = null;
+    for (const p of posts) {
+      const raw = p.timestamp || p.takenAt || p.taken_at_timestamp;
+      if (!raw) continue;
+      const d = typeof raw === "number" ? new Date(raw * (raw < 1e12 ? 1000 : 1)) : new Date(raw);
+      if (!isNaN(d.getTime()) && (!mostRecent || d > mostRecent)) mostRecent = d;
+    }
+    const days = mostRecent ? Math.floor((Date.now() - mostRecent.getTime()) / 86_400_000) : null;
+
+    // Heurística para pessoa vs marca
+    const fullName: string = (profile.fullName || profile.full_name || "").toString();
+    const bio: string = (profile.biography || "").toString();
+    let isPerson: boolean | null = null;
+    const brandMarkers = /(ltda|s\.?a\.?|shop|store|oficial|brand|company|studio|clinic|academia|restaurante|marca)/i;
+    const personMarkers = /(eu sou|i am|founder|coach|criador|criadora|autor|autora|dr\.?|dra\.?)/i;
+    if (brandMarkers.test(fullName) || brandMarkers.test(bio)) isPerson = false;
+    else if (personMarkers.test(bio)) isPerson = true;
+
+    console.log(`[IG] Apify OK @${handle} last_post_days=${days} posts=${posts.length}`);
+    return {
+      instagram_last_post_days: days,
+      instagram_profile_is_person: isPerson,
+      status: days === null ? "not_found" : "success",
+      raw: JSON.stringify({ handle, fullName, bio: bio.slice(0, 200), posts_count: posts.length, mostRecent }).slice(0, 800),
+    };
   } catch (e) {
-    console.error("[IG] error:", e);
-    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: md };
+    console.error("[IG] Apify exception:", e);
+    return { instagram_last_post_days: null, instagram_profile_is_person: null, status: "failed", raw: "" };
   }
 }
+
 
 // ─── Google Maps scrape ───
 interface GoogleMapsResult {

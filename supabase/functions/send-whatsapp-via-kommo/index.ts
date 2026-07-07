@@ -36,6 +36,7 @@ Deno.serve(async (req) => {
     const envAccountUrl = (Deno.env.get("KOMMO_ACCOUNT_URL") || "").replace(/\/+$/, "");
     const botIdRaw = Deno.env.get("KOMMO_BOT_ID") || "";
     const fieldIdRaw = Deno.env.get("KOMMO_CUSTOM_FIELD_ID_MENSAGEM") || "";
+    const whatsappTag = (Deno.env.get("KOMMO_WHATSAPP_TAG") || "enviar-whatsapp").trim();
 
     let base = envAccountUrl;
     let token = envToken;
@@ -109,11 +110,12 @@ Deno.serve(async (req) => {
             custom_fields_values: [
               { field_id: fieldId, values: [{ value: message }] },
             ],
+            ...(whatsappTag ? { _embedded: { tags: [{ name: whatsappTag }] } } : {}),
           }),
         });
         if (!patchResp.ok) {
           const t = await patchResp.text();
-          results.push({ id: lead.id, status: "error", error: `Falha ao atualizar campo mensagem_ia: HTTP ${patchResp.status} ${t.slice(0, 200)}` });
+          results.push({ id: lead.id, status: "error", error: `Falha ao atualizar campo mensagem_ia/tag: HTTP ${patchResp.status} ${t.slice(0, 200)}` });
           continue;
         }
 

@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { Save, Key, MessageCircle, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, Key, Eye, EyeOff, Building2, Database, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -23,9 +23,6 @@ const SettingsPage = () => {
   const [b2bLastValidation, setB2bLastValidation] = useState<string | null>(null);
   const [testingB2b, setTestingB2b] = useState(false);
   const [b2bValid, setB2bValid] = useState<boolean | null>(null);
-  const [whatsappTemplate, setWhatsappTemplate] = useState(
-    "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
-  );
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -40,7 +37,7 @@ const SettingsPage = () => {
       for (const row of data) {
         if (row.key === "api_key") setApiKey(row.value || "");
         if (row.key === "api_provider") setProvider(row.value || "serpapi");
-        if (row.key === "whatsapp_template") setWhatsappTemplate(row.value || "");
+        
         if (row.key === "google_places_api_key") setGooglePlacesKey(row.value || "");
         if (row.key === "kommo_subdomain") setKommoSubdomain(row.value || "");
         if (row.key === "kommo_api_token") setKommoToken(row.value || "");
@@ -68,7 +65,7 @@ const SettingsPage = () => {
     try {
       await saveSetting("api_key", apiKey);
       await saveSetting("api_provider", provider);
-      await saveSetting("whatsapp_template", whatsappTemplate);
+      
       await saveSetting("google_places_api_key", googlePlacesKey);
       await saveSetting("kommo_subdomain", kommoSubdomain);
       await saveSetting("kommo_api_token", kommoToken);
@@ -108,16 +105,12 @@ const SettingsPage = () => {
     setTestingB2b(false);
   };
 
-  const previewMessage = whatsappTemplate
-    .replace(/{nome_empresa}/g, "Restaurante Exemplo")
-    .replace(/{telefone}/g, "11999999999")
-    .replace(/{endereco}/g, "Rua Exemplo, 123");
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Configurações</h1>
-        <p className="text-muted-foreground text-sm">Configure sua API de busca e mensagem do WhatsApp</p>
+        <p className="text-muted-foreground text-sm">Configure sua API de busca e integração Kommo</p>
       </div>
 
       <Card className="border-border/50 bg-card/80">
@@ -347,34 +340,6 @@ const SettingsPage = () => {
         </CardContent>
       </Card>
 
-      <Card className="border-border/50 bg-card/80">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageCircle className="h-5 w-5 text-green-400" />
-            Mensagem WhatsApp
-          </CardTitle>
-          <CardDescription>
-            Use variáveis:{" "}
-            <Badge variant="secondary" className="font-mono text-xs">{"{nome_empresa}"}</Badge>{" "}
-            <Badge variant="secondary" className="font-mono text-xs">{"{telefone}"}</Badge>{" "}
-            <Badge variant="secondary" className="font-mono text-xs">{"{endereco}"}</Badge>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Textarea
-            value={whatsappTemplate}
-            onChange={(e) => setWhatsappTemplate(e.target.value)}
-            rows={4}
-            className="bg-secondary/50 font-mono text-sm"
-          />
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</label>
-            <div className="bg-green-900/20 border border-green-900/30 rounded-lg p-3 text-sm text-green-200">
-              {previewMessage}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <Button onClick={handleSave} disabled={saving} className="w-full h-12 text-base font-semibold">
         <Save className="mr-2 h-5 w-5" />

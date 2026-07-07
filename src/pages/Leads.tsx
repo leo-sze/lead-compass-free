@@ -283,9 +283,6 @@ const Leads = () => {
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
   const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
-  const [whatsappTemplate, setWhatsappTemplate] = useState(
-    "Olá {nome_empresa}, tudo bem? Gostaria de apresentar nossos serviços."
-  );
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
   const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
@@ -317,7 +314,6 @@ const Leads = () => {
 
   useEffect(() => {
     fetchLeads();
-    fetchTemplate();
     fetchKommoSubdomain();
   }, []);
 
@@ -343,10 +339,7 @@ const Leads = () => {
   };
 
 
-  const fetchTemplate = async () => {
-    const { data } = await supabase.from("settings").select("value").eq("key", "whatsapp_template").maybeSingle();
-    if (data?.value) setWhatsappTemplate(data.value);
-  };
+
 
   const fetchKommoSubdomain = async () => {
     const { data } = await supabase.from("settings").select("value").eq("key", "kommo_subdomain").maybeSingle();
@@ -511,17 +504,34 @@ const Leads = () => {
     toast({ title: `${exportedIds.length} leads enviados removidos da lista` });
   };
 
-  const openWhatsApp = (lead: Lead) => {
+  const openWhatsApp = async (lead: Lead) => {
     if (!lead.telefone) {
       toast({ title: "Sem telefone disponível", variant: "destructive" });
       return;
     }
-    const phone = lead.telefone.replace(/\D/g, "");
-    const msg = whatsappTemplate
-      .replace(/{nome_empresa}/g, lead.nome_empresa)
-      .replace(/{telefone}/g, lead.telefone || "")
-      .replace(/{endereco}/g, lead.endereco || "");
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, "_blank");
+    if (!(lead.mensagem_personalizada || "").trim()) {
+      toast({
+        title: "Mensagem não gerada",
+        description: "Gere a mensagem personalizada por IA antes de enviar.",
+        variant: "destructive",
+      });
+      return;
+    }
+    toast({ title: "Enviando via Kommo..." });
+    const { data, error } = await supabase.functions.invoke("send-whatsapp-via-kommo", {
+      body: { leads: [{ id: lead.id, telefone: lead.telefone, nome_empresa: lead.nome_empresa, mensagem_personalizada: lead.mensagem_personalizada }] },
+    });
+    if (error || (data as any)?.error) {
+      toast({ title: "Falha ao enviar", description: error?.message || (data as any)?.error, variant: "destructive" });
+      return;
+    }
+    const r = (data as any)?.results?.[0];
+    if (r?.status === "success") {
+      toast({ title: "Mensagem disparada via Kommo" });
+      setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, mensagem_status: "enviada" } : l)));
+    } else {
+      toast({ title: "Não enviado", description: r?.error || "Erro desconhecido", variant: "destructive" });
+    }
   };
 
   const exportCSV = () => {
@@ -947,7 +957,7 @@ const Leads = () => {
         <div className="flex flex-wrap gap-2 items-center">
           {selected.size > 0 && (
             <>
-              <BulkWhatsApp leads={selectedLeads} template={whatsappTemplate} />
+              <BulkWhatsApp leads={selectedLeads} />
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>

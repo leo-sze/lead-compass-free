@@ -34,8 +34,6 @@ Deno.serve(async (req) => {
     // Prefer env secrets; fallback to settings table for subdomain/token
     const envToken = Deno.env.get("KOMMO_ACCESS_TOKEN") || "";
     const envAccountUrl = (Deno.env.get("KOMMO_ACCOUNT_URL") || "").replace(/\/+$/, "");
-    const botIdRaw = Deno.env.get("KOMMO_BOT_ID") || "";
-    const fieldIdRaw = Deno.env.get("KOMMO_CUSTOM_FIELD_ID_MENSAGEM") || "";
     const whatsappTag = (Deno.env.get("KOMMO_WHATSAPP_TAG") || "enviar-whatsapp").trim();
 
     let base = envAccountUrl;
@@ -56,14 +54,6 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const botId = Number(botIdRaw);
-    const fieldId = Number(fieldIdRaw);
-    if (!botId || !fieldId) {
-      return new Response(JSON.stringify({
-        error: "Configuração faltando: defina os secrets KOMMO_BOT_ID e KOMMO_CUSTOM_FIELD_ID_MENSAGEM.",
-      }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
     const authHeaders = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
     const results: Array<{ id: string; status: "success" | "skipped" | "error"; error?: string; kommo_lead_id?: number }> = [];
 
@@ -80,7 +70,7 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Search Kommo lead by phone
+        // Busca o lead no Kommo pelo telefone
         const searchUrl = `${base}/api/v4/leads?query=${encodeURIComponent(phone)}&with=contacts`;
         const searchResp = await fetch(searchUrl, { headers: authHeaders });
         if (searchResp.status === 401 || searchResp.status === 403) {
@@ -103,39 +93,32 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // 1) PATCH lead: preencher campo personalizado "mensagem_ia" com a mensagem gerada
-        const patchResp = await fetch(`${base}/api/v4/leads/${kommoLeadId}`, {
-          method: "PATCH", headers: authHeaders,
-          body: JSON.stringify({
-            custom_fields_values: [
-              { field_id: fieldId, values: [{ value: message }] },
-            ],
-            ...(whatsappTag ? { _embedded: { tags: [{ name: whatsappTag }] } } : {}),
-          }),
+        // Adiciona a tag no lead (dispara automação de envio de WhatsApp no Kommo)
+        if (whatsappTag) {
+          const tagResp = await fetch(`${base}/api/v4/leads/${kommoLeadId}`, {
+            method: "PATCH", headers: authHeaders,
+            body: JSON.stringify({ _embedded: { tags: [{ name: whatsappTag }] } }),
+          });
+          if (!tagResp.ok) {
+            const t = await tagResp.text();
+            results.push({ id: lead.id, status: "error", error: `Falha ao adicionar tag: HTTP ${tagResp.status} ${t.slice(0, 200)}` });
+            continue;
+          }
+        }
+
+        // Cria uma nota no lead com a mensagem (registro/histórico)
+        const noteResp = await fetch(`${base}/api/v4/leads/${kommoLeadId}/notes`, {
+          method: "POST", headers: authHeaders,
+          body: JSON.stringify([{ note_type: "common", params: { text: message } }]),
         });
-        if (!patchResp.ok) {
-          const t = await patchResp.text();
-          results.push({ id: lead.id, status: "error", error: `Falha ao atualizar campo mensagem_ia/tag: HTTP ${patchResp.status} ${t.slice(0, 200)}` });
+        if (!noteResp.ok && noteResp.status !== 200 && noteResp.status !== 202) {
+          const t = await noteResp.text();
+          results.push({ id: lead.id, status: "error", error: `Falha ao registrar mensagem: HTTP ${noteResp.status} ${t.slice(0, 200)}` });
           continue;
         }
 
-        // 2) Disparar Salesbot via bot_id
-        const botResp = await fetch(`${base}/api/v2/salesbot/run`, {
-          method: "POST", headers: authHeaders,
-          body: JSON.stringify([{ bot_id: botId, entity_type: "leads", entity_id: kommoLeadId }]),
-        });
-
-        if (botResp.status === 202) {
-          await supabase.from("leads").update({ mensagem_status: "enviada" }).eq("id", lead.id);
-          results.push({ id: lead.id, status: "success", kommo_lead_id: kommoLeadId });
-        } else {
-          const t = await botResp.text();
-          results.push({
-            id: lead.id,
-            status: "error",
-            error: `Falha ao disparar Salesbot: HTTP ${botResp.status} ${t.slice(0, 200)}`,
-          });
-        }
+        await supabase.from("leads").update({ mensagem_status: "enviada" }).eq("id", lead.id);
+        results.push({ id: lead.id, status: "success", kommo_lead_id: kommoLeadId });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         results.push({ id: lead.id, status: "error", error: msg });

@@ -12,6 +12,7 @@ import Leads from "./pages/Leads";
 import SettingsPage from "./pages/SettingsPage";
 import FindContacts from "./pages/FindContacts";
 import PhoneLookup from "./pages/PhoneLookup";
+import InstagramMonitor from "./pages/InstagramMonitor";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -37,6 +38,7 @@ const App = () => (
                     <Route path="/leads" element={<Leads />} />
                     <Route path="/find-contacts" element={<FindContacts />} />
                     <Route path="/phone-lookup" element={<PhoneLookup />} />
+                    <Route path="/instagram-monitor" element={<InstagramMonitor />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>

@@ -19,6 +19,7 @@ import { normalizePhone } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
+import CopyForSDR from "@/components/leads/CopyForSDR";
 import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
 import MessageCell from "@/components/leads/MessageCell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -958,6 +959,7 @@ const Leads = () => {
           {selected.size > 0 && (
             <>
               <BulkWhatsApp leads={selectedLeads} />
+              <CopyForSDR leads={selectedLeads} />
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>

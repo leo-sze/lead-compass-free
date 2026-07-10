@@ -19,6 +19,7 @@ import { normalizePhone } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
+import CopyForSDR from "@/components/leads/CopyForSDR";
 import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
 import MessageCell from "@/components/leads/MessageCell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

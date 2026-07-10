@@ -959,6 +959,7 @@ const Leads = () => {
           {selected.size > 0 && (
             <>
               <BulkWhatsApp leads={selectedLeads} />
+              <CopyForSDR leads={selectedLeads} />
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>

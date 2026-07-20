@@ -944,6 +944,56 @@ const Leads = () => {
     setSelected(new Set());
   };
 
+  const handleMarkImportedFromKommo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMarkingKommo(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
+      const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+      const phoneCols = headers
+        .map((h, i) => (/telefone|celular|tel/i.test(h) ? i : -1))
+        .filter((i) => i >= 0);
+      const phones = new Set<string>();
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const row = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+        for (const idx of phoneCols) {
+          const val = row[idx];
+          if (val) {
+            const norm = normalizePhone(val);
+            if (norm) phones.add(norm);
+          }
+        }
+      }
+      if (phones.size === 0) {
+        toast({ title: "Nenhum telefone encontrado no CSV", variant: "destructive" });
+        return;
+      }
+      const phoneList = Array.from(phones);
+      const matches = leads
+        .filter((l) => l.telefone && phoneList.includes(normalizePhone(l.telefone) || ""))
+        .map((l) => l.id);
+      if (matches.length === 0) {
+        toast({ title: "Nenhum lead correspondente encontrado", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase
+        .from("leads")
+        .update({ kommo_imported_at: new Date().toISOString() })
+        .in("id", matches);
+      if (error) throw error;
+      setLeads((prev) => prev.map((l) => (matches.includes(l.id) ? { ...l, kommo_imported_at: new Date().toISOString() } as any : l)));
+      toast({ title: `${matches.length} leads marcados como importados para Kommo` });
+    } catch (err: any) {
+      toast({ title: "Erro ao marcar importados", description: err.message, variant: "destructive" });
+    } finally {
+      setMarkingKommo(false);
+      if (kommoFileInputRef.current) kommoFileInputRef.current.value = "";
+    }
+  };
+
   const pageIds = paginated.map((l) => l.id);
   const allSelectedOnPage = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
 

@@ -1178,8 +1178,7 @@ const Leads = () => {
                 </TableRow>
               ) : (
                 paginated.map((lead) => {
-                  const ks = kommoStatuses[lead.id];
-                  const isExported = ks?.status === "success";
+                  const isExported = !!lead.kommo_imported_at;
                   const isScoring = reAnalyzing.has(lead.id);
                   return (
                     <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-50 bg-green-500/5" : ""}`}>

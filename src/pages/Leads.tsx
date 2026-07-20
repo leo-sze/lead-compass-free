@@ -1427,7 +1427,7 @@ const Leads = () => {
               Exportar para Kommo
             </DialogTitle>
             <DialogDescription className="space-y-2">
-              <p>Você está prestes a exportar <strong>{selectedLeads.filter(l => kommoStatuses[l.id]?.status !== "success").length}</strong> leads para a Kommo.</p>
+              <p>Você está prestes a exportar <strong>{selectedLeads.filter(l => !l.kommo_imported_at).length}</strong> leads para a Kommo.</p>
               <p className="text-xs text-muted-foreground">Leads duplicados serão automaticamente ignorados pela Kommo.</p>
             </DialogDescription>
           </DialogHeader>

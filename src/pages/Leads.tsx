@@ -481,7 +481,7 @@ const Leads = () => {
   };
 
   const removeExportedLeads = async () => {
-    const exportedIds = Array.from(selected).filter(id => kommoStatuses[id]?.status === "success");
+    const exportedIds = Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at);
     if (exportedIds.length === 0) {
       toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });
       return;
@@ -499,9 +499,6 @@ const Leads = () => {
       exportedIds.forEach(id => next.delete(id));
       return next;
     });
-    const newStatuses = { ...kommoStatuses };
-    exportedIds.forEach(id => delete newStatuses[id]);
-    setKommoStatuses(newStatuses);
     toast({ title: `${exportedIds.length} leads enviados removidos da lista` });
   };
 

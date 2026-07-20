@@ -1109,6 +1109,26 @@ const Leads = () => {
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
           </Button>
+          <input
+            type="file"
+            accept=".csv"
+            ref={kommoFileInputRef}
+            onChange={handleMarkImportedFromKommo}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => kommoFileInputRef.current?.click()}
+            disabled={markingKommo}
+            className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+          >
+            {markingKommo ? (
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Marcando...</>
+            ) : (
+              <><Building2 className="h-4 w-4 mr-1" /> Marcar importados Kommo</>
+            )}
+          </Button>
           <Button
             variant="outline"
             size="sm"

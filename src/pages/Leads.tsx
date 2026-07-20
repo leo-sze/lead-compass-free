@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Download, MessageCircle, Trash2, ExternalLink, Instagram, UserSearch, Loader2, Sparkles, Building2, X, CheckCircle, AlertTriangle, XCircle, RefreshCw, Database, Copy, Tag, Star, MessageSquare, User } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Button } from "@/components/ui/button";
@@ -296,6 +296,8 @@ const Leads = () => {
   const [bulkGenMsg, setBulkGenMsg] = useState(false);
   const [bulkGenProgress, setBulkGenProgress] = useState({ current: 0, total: 0 });
   const [regenerateMessages, setRegenerateMessages] = useState(false);
+  const [markingKommo, setMarkingKommo] = useState(false);
+  const kommoFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Kommo export state
@@ -393,8 +395,8 @@ const Leads = () => {
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
     if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
-    if (kommoImported) result = result.filter((l) => kommoStatuses[l.id]?.status === "success");
-    if (kommoNotImported) result = result.filter((l) => kommoStatuses[l.id]?.status !== "success");
+    if (kommoImported) result = result.filter((l) => (l as any).kommo_imported_at);
+    if (kommoNotImported) result = result.filter((l) => !(l as any).kommo_imported_at);
     if (hasMessage) result = result.filter((l) => !!(l as any).mensagem_personalizada);
     if (noMessage) result = result.filter((l) => !(l as any).mensagem_personalizada);
     if (dateFrom) {
@@ -481,7 +483,7 @@ const Leads = () => {
   };
 
   const removeExportedLeads = async () => {
-    const exportedIds = Array.from(selected).filter(id => kommoStatuses[id]?.status === "success");
+    const exportedIds = Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at);
     if (exportedIds.length === 0) {
       toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });
       return;
@@ -499,9 +501,6 @@ const Leads = () => {
       exportedIds.forEach(id => next.delete(id));
       return next;
     });
-    const newStatuses = { ...kommoStatuses };
-    exportedIds.forEach(id => delete newStatuses[id]);
-    setKommoStatuses(newStatuses);
     toast({ title: `${exportedIds.length} leads enviados removidos da lista` });
   };
 
@@ -885,7 +884,7 @@ const Leads = () => {
     setShowConfirmModal(false);
     setExporting(true);
 
-    const leadsToExport = selectedLeads.filter(l => kommoStatuses[l.id]?.status !== "success");
+    const leadsToExport = selectedLeads.filter(l => !l.kommo_imported_at);
     setExportProgress({ current: 0, total: leadsToExport.length });
 
     const batchSize = 50;
@@ -922,12 +921,77 @@ const Leads = () => {
       }
     }
 
+    const successIds = Object.entries(newStatuses)
+      .filter(([_, v]) => v.status === "success")
+      .map(([id]) => id);
+    if (successIds.length > 0) {
+      const { error: updateErr } = await supabase
+        .from("leads")
+        .update({ kommo_imported_at: new Date().toISOString() })
+        .in("id", successIds);
+      if (updateErr) {
+        console.error("Erro ao marcar leads como importados:", updateErr);
+      } else {
+        setLeads((prev) => prev.map((l) => successIds.includes(l.id) ? { ...l, kommo_imported_at: new Date().toISOString() } as any : l));
+      }
+    }
+
     setKommoStatuses(newStatuses);
     setExportProgress({ current: leadsToExport.length, total: leadsToExport.length });
     setExportResult({ success: successCount, duplicates: duplicateCount, errors: errorsList });
     setExporting(false);
     setShowResultModal(true);
     setSelected(new Set());
+  };
+
+  const handleMarkImportedFromKommo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMarkingKommo(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
+      const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+      const phoneCols = headers
+        .map((h, i) => (/telefone|celular|tel/i.test(h) ? i : -1))
+        .filter((i) => i >= 0);
+      const phones = new Set<string>();
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const row = lines[i].split(",").map((c) => c.trim().replace(/^"|"$/g, ""));
+        for (const idx of phoneCols) {
+          const val = row[idx];
+          if (val) {
+            const norm = normalizePhone(val);
+            if (norm) phones.add(norm);
+          }
+        }
+      }
+      if (phones.size === 0) {
+        toast({ title: "Nenhum telefone encontrado no CSV", variant: "destructive" });
+        return;
+      }
+      const phoneList = Array.from(phones);
+      const matches = leads
+        .filter((l) => l.telefone && phoneList.includes(normalizePhone(l.telefone) || ""))
+        .map((l) => l.id);
+      if (matches.length === 0) {
+        toast({ title: "Nenhum lead correspondente encontrado", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase
+        .from("leads")
+        .update({ kommo_imported_at: new Date().toISOString() })
+        .in("id", matches);
+      if (error) throw error;
+      setLeads((prev) => prev.map((l) => (matches.includes(l.id) ? { ...l, kommo_imported_at: new Date().toISOString() } as any : l)));
+      toast({ title: `${matches.length} leads marcados como importados para Kommo` });
+    } catch (err: any) {
+      toast({ title: "Erro ao marcar importados", description: err.message, variant: "destructive" });
+    } finally {
+      setMarkingKommo(false);
+      if (kommoFileInputRef.current) kommoFileInputRef.current.value = "";
+    }
   };
 
   const pageIds = paginated.map((l) => l.id);
@@ -963,9 +1027,9 @@ const Leads = () => {
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>
-              {Array.from(selected).some(id => kommoStatuses[id]?.status === "success") && (
+              {Array.from(selected).some(id => leads.find(l => l.id === id)?.kommo_imported_at) && (
                 <Button variant="outline" size="sm" onClick={removeExportedLeads} className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
-                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => kommoStatuses[id]?.status === "success").length})
+                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at).length})
                 </Button>
               )}
               <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
@@ -1044,6 +1108,26 @@ const Leads = () => {
           </div>
           <Button variant="outline" size="sm" onClick={exportCSV}>
             <Download className="h-4 w-4 mr-1" /> Exportar CSV
+          </Button>
+          <input
+            type="file"
+            accept=".csv"
+            ref={kommoFileInputRef}
+            onChange={handleMarkImportedFromKommo}
+            className="hidden"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => kommoFileInputRef.current?.click()}
+            disabled={markingKommo}
+            className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
+          >
+            {markingKommo ? (
+              <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Marcando...</>
+            ) : (
+              <><Building2 className="h-4 w-4 mr-1" /> Marcar importados Kommo</>
+            )}
           </Button>
           <Button
             variant="outline"
@@ -1167,7 +1251,7 @@ const Leads = () => {
               ) : (
                 paginated.map((lead) => {
                   const ks = kommoStatuses[lead.id];
-                  const isExported = ks?.status === "success";
+                  const isExported = !!lead.kommo_imported_at;
                   const isScoring = reAnalyzing.has(lead.id);
                   return (
                     <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-50 bg-green-500/5" : ""}`}>
@@ -1415,7 +1499,7 @@ const Leads = () => {
               Exportar para Kommo
             </DialogTitle>
             <DialogDescription className="space-y-2">
-              <p>Você está prestes a exportar <strong>{selectedLeads.filter(l => kommoStatuses[l.id]?.status !== "success").length}</strong> leads para a Kommo.</p>
+              <p>Você está prestes a exportar <strong>{selectedLeads.filter(l => !l.kommo_imported_at).length}</strong> leads para a Kommo.</p>
               <p className="text-xs text-muted-foreground">Leads duplicados serão automaticamente ignorados pela Kommo.</p>
             </DialogDescription>
           </DialogHeader>

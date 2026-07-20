@@ -58,6 +58,7 @@ export type Database = {
           instagram_profile_is_person: boolean | null
           instagram_scrape_status: string | null
           justificativa: string | null
+          kommo_imported_at: string | null
           lead_quality: string | null
           linkedin: string | null
           mensagem_gerada_em: string | null
@@ -97,6 +98,7 @@ export type Database = {
           instagram_profile_is_person?: boolean | null
           instagram_scrape_status?: string | null
           justificativa?: string | null
+          kommo_imported_at?: string | null
           lead_quality?: string | null
           linkedin?: string | null
           mensagem_gerada_em?: string | null
@@ -136,6 +138,7 @@ export type Database = {
           instagram_profile_is_person?: boolean | null
           instagram_scrape_status?: string | null
           justificativa?: string | null
+          kommo_imported_at?: string | null
           lead_quality?: string | null
           linkedin?: string | null
           mensagem_gerada_em?: string | null

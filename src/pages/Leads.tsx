@@ -919,6 +919,21 @@ const Leads = () => {
       }
     }
 
+    const successIds = Object.entries(newStatuses)
+      .filter(([_, v]) => v.status === "success")
+      .map(([id]) => id);
+    if (successIds.length > 0) {
+      const { error: updateErr } = await supabase
+        .from("leads")
+        .update({ kommo_imported_at: new Date().toISOString() })
+        .in("id", successIds);
+      if (updateErr) {
+        console.error("Erro ao marcar leads como importados:", updateErr);
+      } else {
+        setLeads((prev) => prev.map((l) => successIds.includes(l.id) ? { ...l, kommo_imported_at: new Date().toISOString() } as any : l));
+      }
+    }
+
     setKommoStatuses(newStatuses);
     setExportProgress({ current: leadsToExport.length, total: leadsToExport.length });
     setExportResult({ success: successCount, duplicates: duplicateCount, errors: errorsList });

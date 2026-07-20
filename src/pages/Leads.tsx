@@ -393,8 +393,8 @@ const Leads = () => {
     if (hasInstagram) result = result.filter((l) => l.instagram);
     if (hasDecisor) result = result.filter((l) => l.nome_decisor);
     if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
-    if (kommoImported) result = result.filter((l) => kommoStatuses[l.id]?.status === "success");
-    if (kommoNotImported) result = result.filter((l) => kommoStatuses[l.id]?.status !== "success");
+    if (kommoImported) result = result.filter((l) => (l as any).kommo_imported_at);
+    if (kommoNotImported) result = result.filter((l) => !(l as any).kommo_imported_at);
     if (hasMessage) result = result.filter((l) => !!(l as any).mensagem_personalizada);
     if (noMessage) result = result.filter((l) => !(l as any).mensagem_personalizada);
     if (dateFrom) {

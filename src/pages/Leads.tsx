@@ -975,9 +975,9 @@ const Leads = () => {
               <Button variant="destructive" size="sm" onClick={deleteSelected}>
                 <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
               </Button>
-              {Array.from(selected).some(id => kommoStatuses[id]?.status === "success") && (
+              {Array.from(selected).some(id => leads.find(l => l.id === id)?.kommo_imported_at) && (
                 <Button variant="outline" size="sm" onClick={removeExportedLeads} className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
-                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => kommoStatuses[id]?.status === "success").length})
+                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at).length})
                 </Button>
               )}
               <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>

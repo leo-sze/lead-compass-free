@@ -296,6 +296,8 @@ const Leads = () => {
   const [bulkGenMsg, setBulkGenMsg] = useState(false);
   const [bulkGenProgress, setBulkGenProgress] = useState({ current: 0, total: 0 });
   const [regenerateMessages, setRegenerateMessages] = useState(false);
+  const [markingKommo, setMarkingKommo] = useState(false);
+  const kommoFileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   // Kommo export state

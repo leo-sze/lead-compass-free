@@ -882,7 +882,7 @@ const Leads = () => {
     setShowConfirmModal(false);
     setExporting(true);
 
-    const leadsToExport = selectedLeads.filter(l => kommoStatuses[l.id]?.status !== "success");
+    const leadsToExport = selectedLeads.filter(l => !l.kommo_imported_at);
     setExportProgress({ current: 0, total: leadsToExport.length });
 
     const batchSize = 50;

@@ -136,7 +136,7 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | n
   });
 }
 
-const STAGE_TIMEOUT_MS = 8000;
+const STAGE_TIMEOUT_MS = 25000;
 
 async function findCnpj(
   nome: string,

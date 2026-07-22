@@ -632,7 +632,7 @@ const Leads = () => {
     };
 
     setEnriching(true);
-    let ok = 0, fail = 0;
+    let ok = 0, notFound = 0, fail = 0;
 
     for (const lead of toEnrich) {
       setEnrichProgress(`${stageLabels[stage]} ${ok + fail + 1}/${toEnrich.length} — ${lead.nome_empresa}`);
@@ -667,16 +667,20 @@ const Leads = () => {
         const statusKey = `enrich_${stage}_status`;
         const stageStatus = updates[statusKey];
         const meaningfulKeys = Object.keys(updates).filter(
-          (k) => !k.startsWith("enrich_") && updates[k] !== null && updates[k] !== undefined
+          (k) =>
+            !k.startsWith("enrich_") &&
+            k !== "debug_raw_data" &&
+            updates[k] !== null &&
+            updates[k] !== undefined
         );
         if (Object.keys(updates).length > 0) {
           const { error: updateError } = await supabase.from("leads").update(updates).eq("id", lead.id);
           if (updateError) throw updateError;
           setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
           if (meaningfulKeys.length > 0 || stageStatus === "success") ok++;
-          else fail++;
+          else notFound++;
         } else {
-          fail++;
+          notFound++;
         }
       } catch (e) {
         console.error(`Enrich ${stage} error:`, e);
@@ -689,7 +693,8 @@ const Leads = () => {
     setEnrichProgress("");
     toast({
       title: `Etapa "${stageLabels[stage]}" concluída`,
-      description: `${ok} atualizados, ${fail} sem dados novos.`,
+      description: `${ok} com sucesso, ${notFound} sem dados novos${fail ? `, ${fail} falharam` : ""}.`,
+      variant: fail > 0 && ok === 0 ? "destructive" : "default",
     });
   }, [selected, selectedLeads, filtered, toast]);
 

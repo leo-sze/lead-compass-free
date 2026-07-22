@@ -1009,8 +1009,23 @@ Deno.serve(async (req) => {
         if (!updates[k]) updates[k] = v;
       }
 
-      // fallback decisor via IA se ainda vazio (mantém compat com "all")
-      if (needsDecisor && !decisorFound && stage === "all") {
+      // Google Places como fonte rica para leads sem CNPJ/site/telefone
+      const stillMissingContact = !(updates.telefone || telefone) || !(updates.site || site) || !(updates.endereco || endereco);
+      if (stillMissingContact) {
+        const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
+        const places = await withTimeout(
+          scrapeGoogleMaps(nome_empresa, (updates.cidade as string) || cidade || null, GOOGLE_PLACES_KEY_B),
+          STAGE_TIMEOUT_MS, "gmaps-business",
+        );
+        if (places?.status === "success") {
+          if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
+          if (!site && !updates.site && places.site) updates.site = places.site;
+          if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
+        }
+      }
+
+      // Fallback decisor via IA / reviews / IG bio — roda em business e all
+      if (needsDecisor && !decisorFound) {
         const igUrl = (updates.instagram as string) || instagram || null;
         if (igUrl) {
           const igDecisor = await withTimeout(
@@ -1037,33 +1052,45 @@ Deno.serve(async (req) => {
 
       if (stage === "business") {
         updates.enrich_business_at = new Date().toISOString();
-        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco) ? "success" : "not_found";
+        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco || updates.site) ? "success" : "not_found";
       }
     }
 
     // ═══════════════════ ETAPA 2: DECISOR ═══════════════════
     if (stage === "decisor") {
-      const decisorNome = nome_decisor;
-      if (!decisorNome || decisorNome === "Não identificado") {
-        return new Response(JSON.stringify({
-          error: "Lead sem nome do decisor. Rode a etapa 'Negócio' primeiro.",
-          updates: { enrich_decisor_status: "skipped", enrich_decisor_at: new Date().toISOString() },
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      let decisorNome = nome_decisor && nome_decisor !== "Não identificado" ? nome_decisor : null;
+
+      // Tenta descobrir se ainda vazio (IG bio -> Google reviews -> IA)
+      if (!decisorNome) {
+        const igUrl = instagram || null;
+        if (igUrl) {
+          const d = await withTimeout(decisorFromInstagram(igUrl, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "IG-bio");
+          if (d) { decisorNome = d; updates.nome_decisor = d; decisorFonte = "instagram_bio"; }
+        }
+        if (!decisorNome) {
+          const d = await withTimeout(decisorFromGoogleReviews(nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "GReviews");
+          if (d) { decisorNome = d; updates.nome_decisor = d; decisorFonte = "google_reviews"; }
+        }
+        if (!decisorNome) {
+          const d = await withTimeout(aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "ia_fallback");
+          if (d) { decisorNome = d; updates.nome_decisor = d; decisorFonte = "ia_fallback"; }
+        }
       }
 
-      const contact = await withTimeout(
-        findDecisorContact(decisorNome, nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
-        STAGE_TIMEOUT_MS * 2,
-        "decisor-contact",
-      );
-
-      if (contact?.linkedin && !decisor_linkedin) updates.decisor_linkedin = contact.linkedin;
-      if (contact?.telefone && !decisor_telefone) updates.decisor_telefone = contact.telefone;
-      decisorFonte = contact?.fonte || null;
+      if (decisorNome) {
+        const contact = await withTimeout(
+          findDecisorContact(decisorNome, nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+          STAGE_TIMEOUT_MS * 2, "decisor-contact",
+        );
+        if (contact?.linkedin && !decisor_linkedin) updates.decisor_linkedin = contact.linkedin;
+        if (contact?.telefone && !decisor_telefone) updates.decisor_telefone = contact.telefone;
+        if (contact?.fonte && !decisorFonte) decisorFonte = contact.fonte;
+      }
 
       updates.enrich_decisor_at = new Date().toISOString();
-      updates.enrich_decisor_status = (contact?.linkedin || contact?.telefone) ? "success" : "not_found";
+      updates.enrich_decisor_status = (updates.decisor_linkedin || updates.decisor_telefone || updates.nome_decisor) ? "success" : "not_found";
     }
+
 
     // ═══════════════════ ETAPA 3: MATURIDADE ═══════════════════
     // Instagram (Apify) + Google Maps profile — sinais de atividade digital

@@ -583,12 +583,14 @@ async function scrapeInstagram(
 }
 
 
-// ─── Google Maps scrape ───
 interface GoogleMapsResult {
   google_rating: number | null;
   google_review_count: number | null;
   google_owner_replied_recently: boolean | null;
   google_profile_complete: boolean | null;
+  telefone: string | null;
+  site: string | null;
+  endereco: string | null;
   status: "success" | "failed" | "not_found";
   raw: string;
 }
@@ -598,75 +600,54 @@ async function scrapeGoogleMaps(
   cidade: string | null,
   googlePlacesKey: string | null,
 ): Promise<GoogleMapsResult> {
+  const empty: GoogleMapsResult = { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, telefone: null, site: null, endereco: null, status: "failed", raw: "" };
   if (!googlePlacesKey) {
     console.log(`[GMaps] SEM Google Places API key — pulando`);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: "no_api_key" };
+    return { ...empty, raw: "no_api_key" };
   }
   const textQuery = `${nome}${cidade ? ` ${cidade}` : ""}`;
   const fieldMask = [
-    "places.id",
-    "places.displayName",
-    "places.formattedAddress",
-    "places.rating",
-    "places.userRatingCount",
-    "places.regularOpeningHours",
-    "places.photos",
-    "places.primaryTypeDisplayName",
-    "places.businessStatus",
+    "places.id", "places.displayName", "places.formattedAddress",
+    "places.rating", "places.userRatingCount",
+    "places.regularOpeningHours", "places.photos",
+    "places.primaryTypeDisplayName", "places.businessStatus",
     "places.reviews",
+    "places.nationalPhoneNumber", "places.internationalPhoneNumber", "places.websiteUri",
   ].join(",");
   try {
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": googlePlacesKey,
-        "X-Goog-FieldMask": fieldMask,
-      },
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": googlePlacesKey, "X-Goog-FieldMask": fieldMask },
       body: JSON.stringify({ textQuery, languageCode: "pt-BR", regionCode: "BR", pageSize: 1 }),
     });
     const raw = await res.text();
     console.log(`[GMaps] Places API status=${res.status} len=${raw.length} query=${textQuery}`);
-    if (!res.ok) {
-      console.log(`[GMaps] FALHA Places API ${res.status} body=${raw.slice(0, 300)}`);
-      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw };
-    }
+    if (!res.ok) return { ...empty, status: "failed", raw };
     const data = JSON.parse(raw);
     const place = data.places?.[0];
-    if (!place) {
-      console.log(`[GMaps] NOT_FOUND — nenhum lugar para "${textQuery}"`);
-      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "not_found", raw };
-    }
+    if (!place) return { ...empty, status: "not_found", raw };
     const rating = typeof place.rating === "number" ? Math.round(place.rating * 10) / 10 : null;
     const count = typeof place.userRatingCount === "number" ? place.userRatingCount : null;
     const hasPhotos = Array.isArray(place.photos) && place.photos.length > 0;
     const hasHours = !!place.regularOpeningHours;
     const hasCategory = !!place.primaryTypeDisplayName;
     const complete = hasPhotos && hasHours && hasCategory;
-
-    // Owner reply: Places API não expõe replies diretamente. Marcamos true se houver
-    // qualquer review recente (< 90 dias) — heurística conservadora; null se não houver reviews.
-    let ownerReplied: boolean | null = null;
-    if (Array.isArray(place.reviews) && place.reviews.length > 0) {
-      // Fica null (unknown) — não temos sinal confiável via Places API.
-      // Melhor null do que falso positivo.
-      ownerReplied = null;
-    }
-
-    console.log(`[GMaps] SUCCESS rating=${rating} reviews=${count} complete=${complete} (photos=${hasPhotos} hours=${hasHours} cat=${hasCategory})`);
+    const tel = place.internationalPhoneNumber || place.nationalPhoneNumber || null;
+    const site = place.websiteUri || null;
+    const endereco = place.formattedAddress || null;
+    console.log(`[GMaps] SUCCESS rating=${rating} reviews=${count} tel=${!!tel} site=${!!site}`);
     return {
-      google_rating: rating,
-      google_review_count: count,
-      google_owner_replied_recently: ownerReplied,
-      google_profile_complete: complete,
-      status: "success",
-      raw: raw.slice(0, 4000),
+      google_rating: rating, google_review_count: count,
+      google_owner_replied_recently: null, google_profile_complete: complete,
+      telefone: tel, site, endereco,
+      status: "success", raw: raw.slice(0, 4000),
     };
   } catch (e) {
     console.error("[GMaps] error:", e);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: String(e) };
+    return { ...empty, status: "failed", raw: String(e) };
   }
 }
+
 
 // ─── Commercial score (0-10) + tier ───
 const CHAIN_REGEX = /\b(smartfit|smart\s?fit|bodytech|bluefit|formula|f[oó]rmula|bio\s?ritmo|franquia|grupo|rede\s|holding)\b/i;

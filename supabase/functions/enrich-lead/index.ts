@@ -583,12 +583,14 @@ async function scrapeInstagram(
 }
 
 
-// ─── Google Maps scrape ───
 interface GoogleMapsResult {
   google_rating: number | null;
   google_review_count: number | null;
   google_owner_replied_recently: boolean | null;
   google_profile_complete: boolean | null;
+  telefone: string | null;
+  site: string | null;
+  endereco: string | null;
   status: "success" | "failed" | "not_found";
   raw: string;
 }
@@ -598,75 +600,54 @@ async function scrapeGoogleMaps(
   cidade: string | null,
   googlePlacesKey: string | null,
 ): Promise<GoogleMapsResult> {
+  const empty: GoogleMapsResult = { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, telefone: null, site: null, endereco: null, status: "failed", raw: "" };
   if (!googlePlacesKey) {
     console.log(`[GMaps] SEM Google Places API key — pulando`);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: "no_api_key" };
+    return { ...empty, raw: "no_api_key" };
   }
   const textQuery = `${nome}${cidade ? ` ${cidade}` : ""}`;
   const fieldMask = [
-    "places.id",
-    "places.displayName",
-    "places.formattedAddress",
-    "places.rating",
-    "places.userRatingCount",
-    "places.regularOpeningHours",
-    "places.photos",
-    "places.primaryTypeDisplayName",
-    "places.businessStatus",
+    "places.id", "places.displayName", "places.formattedAddress",
+    "places.rating", "places.userRatingCount",
+    "places.regularOpeningHours", "places.photos",
+    "places.primaryTypeDisplayName", "places.businessStatus",
     "places.reviews",
+    "places.nationalPhoneNumber", "places.internationalPhoneNumber", "places.websiteUri",
   ].join(",");
   try {
     const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": googlePlacesKey,
-        "X-Goog-FieldMask": fieldMask,
-      },
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": googlePlacesKey, "X-Goog-FieldMask": fieldMask },
       body: JSON.stringify({ textQuery, languageCode: "pt-BR", regionCode: "BR", pageSize: 1 }),
     });
     const raw = await res.text();
     console.log(`[GMaps] Places API status=${res.status} len=${raw.length} query=${textQuery}`);
-    if (!res.ok) {
-      console.log(`[GMaps] FALHA Places API ${res.status} body=${raw.slice(0, 300)}`);
-      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw };
-    }
+    if (!res.ok) return { ...empty, status: "failed", raw };
     const data = JSON.parse(raw);
     const place = data.places?.[0];
-    if (!place) {
-      console.log(`[GMaps] NOT_FOUND — nenhum lugar para "${textQuery}"`);
-      return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "not_found", raw };
-    }
+    if (!place) return { ...empty, status: "not_found", raw };
     const rating = typeof place.rating === "number" ? Math.round(place.rating * 10) / 10 : null;
     const count = typeof place.userRatingCount === "number" ? place.userRatingCount : null;
     const hasPhotos = Array.isArray(place.photos) && place.photos.length > 0;
     const hasHours = !!place.regularOpeningHours;
     const hasCategory = !!place.primaryTypeDisplayName;
     const complete = hasPhotos && hasHours && hasCategory;
-
-    // Owner reply: Places API não expõe replies diretamente. Marcamos true se houver
-    // qualquer review recente (< 90 dias) — heurística conservadora; null se não houver reviews.
-    let ownerReplied: boolean | null = null;
-    if (Array.isArray(place.reviews) && place.reviews.length > 0) {
-      // Fica null (unknown) — não temos sinal confiável via Places API.
-      // Melhor null do que falso positivo.
-      ownerReplied = null;
-    }
-
-    console.log(`[GMaps] SUCCESS rating=${rating} reviews=${count} complete=${complete} (photos=${hasPhotos} hours=${hasHours} cat=${hasCategory})`);
+    const tel = place.internationalPhoneNumber || place.nationalPhoneNumber || null;
+    const site = place.websiteUri || null;
+    const endereco = place.formattedAddress || null;
+    console.log(`[GMaps] SUCCESS rating=${rating} reviews=${count} tel=${!!tel} site=${!!site}`);
     return {
-      google_rating: rating,
-      google_review_count: count,
-      google_owner_replied_recently: ownerReplied,
-      google_profile_complete: complete,
-      status: "success",
-      raw: raw.slice(0, 4000),
+      google_rating: rating, google_review_count: count,
+      google_owner_replied_recently: null, google_profile_complete: complete,
+      telefone: tel, site, endereco,
+      status: "success", raw: raw.slice(0, 4000),
     };
   } catch (e) {
     console.error("[GMaps] error:", e);
-    return { google_rating: null, google_review_count: null, google_owner_replied_recently: null, google_profile_complete: null, status: "failed", raw: String(e) };
+    return { ...empty, status: "failed", raw: String(e) };
   }
 }
+
 
 // ─── Commercial score (0-10) + tier ───
 const CHAIN_REGEX = /\b(smartfit|smart\s?fit|bodytech|bluefit|formula|f[oó]rmula|bio\s?ritmo|franquia|grupo|rede\s|holding)\b/i;
@@ -1028,8 +1009,23 @@ Deno.serve(async (req) => {
         if (!updates[k]) updates[k] = v;
       }
 
-      // fallback decisor via IA se ainda vazio (mantém compat com "all")
-      if (needsDecisor && !decisorFound && stage === "all") {
+      // Google Places como fonte rica para leads sem CNPJ/site/telefone
+      const stillMissingContact = !(updates.telefone || telefone) || !(updates.site || site) || !(updates.endereco || endereco);
+      if (stillMissingContact) {
+        const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
+        const places = await withTimeout(
+          scrapeGoogleMaps(nome_empresa, (updates.cidade as string) || cidade || null, GOOGLE_PLACES_KEY_B),
+          STAGE_TIMEOUT_MS, "gmaps-business",
+        );
+        if (places?.status === "success") {
+          if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
+          if (!site && !updates.site && places.site) updates.site = places.site;
+          if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
+        }
+      }
+
+      // Fallback decisor via IA / reviews / IG bio — roda em business e all
+      if (needsDecisor && !decisorFound) {
         const igUrl = (updates.instagram as string) || instagram || null;
         if (igUrl) {
           const igDecisor = await withTimeout(
@@ -1056,33 +1052,45 @@ Deno.serve(async (req) => {
 
       if (stage === "business") {
         updates.enrich_business_at = new Date().toISOString();
-        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco) ? "success" : "not_found";
+        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco || updates.site) ? "success" : "not_found";
       }
     }
 
     // ═══════════════════ ETAPA 2: DECISOR ═══════════════════
     if (stage === "decisor") {
-      const decisorNome = nome_decisor;
-      if (!decisorNome || decisorNome === "Não identificado") {
-        return new Response(JSON.stringify({
-          error: "Lead sem nome do decisor. Rode a etapa 'Negócio' primeiro.",
-          updates: { enrich_decisor_status: "skipped", enrich_decisor_at: new Date().toISOString() },
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      let decisorNome = nome_decisor && nome_decisor !== "Não identificado" ? nome_decisor : null;
+
+      // Tenta descobrir se ainda vazio (IG bio -> Google reviews -> IA)
+      if (!decisorNome) {
+        const igUrl = instagram || null;
+        if (igUrl) {
+          const d = await withTimeout(decisorFromInstagram(igUrl, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "IG-bio");
+          if (d) { decisorNome = d; updates.nome_decisor = d; decisorFonte = "instagram_bio"; }
+        }
+        if (!decisorNome) {
+          const d = await withTimeout(decisorFromGoogleReviews(nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "GReviews");
+          if (d) { decisorNome = d; updates.nome_decisor = d; decisorFonte = "google_reviews"; }
+        }
+        if (!decisorNome) {
+          const d = await withTimeout(aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "ia_fallback");
+          if (d) { decisorNome = d; updates.nome_decisor = d; decisorFonte = "ia_fallback"; }
+        }
       }
 
-      const contact = await withTimeout(
-        findDecisorContact(decisorNome, nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
-        STAGE_TIMEOUT_MS * 2,
-        "decisor-contact",
-      );
-
-      if (contact?.linkedin && !decisor_linkedin) updates.decisor_linkedin = contact.linkedin;
-      if (contact?.telefone && !decisor_telefone) updates.decisor_telefone = contact.telefone;
-      decisorFonte = contact?.fonte || null;
+      if (decisorNome) {
+        const contact = await withTimeout(
+          findDecisorContact(decisorNome, nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+          STAGE_TIMEOUT_MS * 2, "decisor-contact",
+        );
+        if (contact?.linkedin && !decisor_linkedin) updates.decisor_linkedin = contact.linkedin;
+        if (contact?.telefone && !decisor_telefone) updates.decisor_telefone = contact.telefone;
+        if (contact?.fonte && !decisorFonte) decisorFonte = contact.fonte;
+      }
 
       updates.enrich_decisor_at = new Date().toISOString();
-      updates.enrich_decisor_status = (contact?.linkedin || contact?.telefone) ? "success" : "not_found";
+      updates.enrich_decisor_status = (updates.decisor_linkedin || updates.decisor_telefone || updates.nome_decisor) ? "success" : "not_found";
     }
+
 
     // ═══════════════════ ETAPA 3: MATURIDADE ═══════════════════
     // Instagram (Apify) + Google Maps profile — sinais de atividade digital

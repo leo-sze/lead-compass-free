@@ -57,6 +57,7 @@ async function searchWeb(query: string, apiKey: string): Promise<string> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ query, limit: 5, scrapeOptions: { formats: ["markdown"] } }),
+      signal: AbortSignal.timeout(12000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -64,8 +65,10 @@ async function searchWeb(query: string, apiKey: string): Promise<string> {
         .map((r: any) => `--- ${r.url} ---\n${(r.markdown || r.description || "").slice(0, 2000)}`)
         .join("\n\n");
     }
+    const text = await res.text();
+    console.error(`[Firecrawl search] HTTP ${res.status} query="${query}" body=${text.slice(0, 300)}`);
   } catch (e) {
-    console.error(`Search error:`, e);
+    console.error(`[Firecrawl search] erro query="${query}":`, e);
   }
   return "";
 }
@@ -80,11 +83,14 @@ async function scrapeUrl(url: string, apiKey: string): Promise<string> {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+      signal: AbortSignal.timeout(12000),
     });
     if (res.ok) {
       const data = await res.json();
       return (data.data?.markdown || data.markdown || "").slice(0, 5000);
     }
+    const text = await res.text();
+    console.error(`[Firecrawl scrape] HTTP ${res.status} url=${url} body=${text.slice(0, 300)}`);
   } catch (e) {
     console.error(`Scrape error ${url}:`, e);
   }
@@ -124,6 +130,34 @@ function extractLogradouro(endereco: string | null): string | null {
   return head.length >= 4 ? head : null;
 }
 
+function normalizePhoneDigits(phone: string | null): string | null {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("55") && digits.length >= 12) digits = digits.slice(2);
+  return digits.length >= 10 ? digits : null;
+}
+
+function formatPhoneForSearch(phone: string | null): string | null {
+  const digits = normalizePhoneDigits(phone);
+  if (!digits) return null;
+  const ddd = digits.slice(0, 2);
+  const local = digits.slice(2);
+  if (local.length === 9) return `(${ddd}) ${local.slice(0, 5)}-${local.slice(5)}`;
+  if (local.length === 8) return `(${ddd}) ${local.slice(0, 4)}-${local.slice(4)}`;
+  return digits;
+}
+
+function extractDomain(site: string | null): string | null {
+  if (!site) return null;
+  try {
+    const withProtocol = /^https?:\/\//i.test(site) ? site : `https://${site}`;
+    return new URL(withProtocol).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
 // Timeout wrapper: resolves to null if the promise takes longer than `ms`
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T | null> {
   return new Promise((resolve) => {
@@ -141,11 +175,15 @@ const STAGE_TIMEOUT_MS = 25000;
 async function findCnpj(
   nome: string,
   cidade: string | null,
-  _telefone: string | null,
+  telefone: string | null,
   endereco: string | null,
+  site: string | null,
   firecrawlKey: string
 ): Promise<string | null> {
   const logradouro = extractLogradouro(endereco);
+  const phoneDigits = normalizePhoneDigits(telefone);
+  const phoneFormatted = formatPhoneForSearch(telefone);
+  const domain = extractDomain(site);
 
   const strategies: Array<{ label: string; run: () => Promise<string | null> }> = [
     {
@@ -165,6 +203,30 @@ async function findCnpj(
         : null,
     },
     {
+      label: "nome+endereco+CNPJ",
+      run: async () => endereco
+        ? extractCnpjFromText(await searchWeb(`"${nome}" "${endereco.slice(0, 90)}" CNPJ`, firecrawlKey))
+        : null,
+    },
+    {
+      label: "telefone+CNPJ",
+      run: async () => phoneFormatted
+        ? extractCnpjFromText(await searchWeb(`"${phoneFormatted}" "${nome}" CNPJ`, firecrawlKey))
+        : null,
+    },
+    {
+      label: "telefone-digitos+CNPJ",
+      run: async () => phoneDigits
+        ? extractCnpjFromText(await searchWeb(`"${phoneDigits}" "${nome}" CNPJ`, firecrawlKey))
+        : null,
+    },
+    {
+      label: "site-domain+CNPJ",
+      run: async () => domain
+        ? extractCnpjFromText(await searchWeb(`"${domain}" "${nome}" CNPJ`, firecrawlKey))
+        : null,
+    },
+    {
       label: "site:cnpj.biz",
       run: async () => extractCnpjFromText(
         await searchWeb(`"${nome}" site:cnpj.biz`, firecrawlKey)
@@ -173,7 +235,11 @@ async function findCnpj(
   ];
 
   const results = await Promise.all(strategies.map(s =>
-    s.run().catch(e => { console.error(`[CNPJ] Erro em ${s.label}:`, e); return null; })
+    withTimeout(
+      s.run().catch(e => { console.error(`[CNPJ] Erro em ${s.label}:`, e); return null; }),
+      14000,
+      `cnpj:${s.label}`,
+    )
   ));
 
   for (let i = 0; i < results.length; i++) {
@@ -950,7 +1016,7 @@ Deno.serve(async (req) => {
       let foundCnpj = cnpj || null;
       if (!foundCnpj) {
         foundCnpj = await withTimeout(
-          findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY),
+          findCnpj(nome_empresa, cidade, telefone || null, endereco || null, site || null, FIRECRAWL_API_KEY),
           STAGE_TIMEOUT_MS,
           "findCnpj",
         );
@@ -1011,6 +1077,7 @@ Deno.serve(async (req) => {
 
       // Google Places como fonte rica para leads sem CNPJ/site/telefone
       const stillMissingContact = !(updates.telefone || telefone) || !(updates.site || site) || !(updates.endereco || endereco);
+      let businessVerifiedByMaps = false;
       if (stillMissingContact) {
         const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
         const places = await withTimeout(
@@ -1018,6 +1085,7 @@ Deno.serve(async (req) => {
           STAGE_TIMEOUT_MS, "gmaps-business",
         );
         if (places?.status === "success") {
+          businessVerifiedByMaps = true;
           if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
           if (!site && !updates.site && places.site) updates.site = places.site;
           if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
@@ -1052,13 +1120,38 @@ Deno.serve(async (req) => {
 
       if (stage === "business") {
         updates.enrich_business_at = new Date().toISOString();
-        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco || updates.site) ? "success" : "not_found";
+        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco || updates.site || businessVerifiedByMaps) ? "success" : "not_found";
       }
     }
 
     // ═══════════════════ ETAPA 2: DECISOR ═══════════════════
     if (stage === "decisor") {
       let decisorNome = nome_decisor && nome_decisor !== "Não identificado" ? nome_decisor : null;
+
+      // Se o usuário roda direto a etapa Decisor em um lead sem CNPJ, tenta achar CNPJ/QSA antes
+      // de cair nos fallbacks menos confiáveis. Isso evita que a etapa pare sem tentar a Receita.
+      if (!decisorNome) {
+        let foundCnpj = cnpj || null;
+        if (!foundCnpj) {
+          foundCnpj = await withTimeout(
+            findCnpj(nome_empresa, cidade, telefone || null, endereco || null, site || null, FIRECRAWL_API_KEY),
+            STAGE_TIMEOUT_MS,
+            "decisor-findCnpj",
+          );
+          if (foundCnpj) updates.cnpj = foundCnpj;
+        }
+        if (foundCnpj) {
+          const brasilData = await withTimeout(queryBrasilApi(foundCnpj), STAGE_TIMEOUT_MS, "decisor-brasilapi");
+          if (brasilData?.qsa?.length) {
+            const qsaName = selectDecisor(brasilData.qsa);
+            if (qsaName) {
+              decisorNome = qsaName;
+              updates.nome_decisor = qsaName;
+              decisorFonte = "brasilapi_qsa";
+            }
+          }
+        }
+      }
 
       // Tenta descobrir se ainda vazio (IG bio -> Google reviews -> IA)
       if (!decisorNome) {

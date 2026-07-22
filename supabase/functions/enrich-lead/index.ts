@@ -29,8 +29,12 @@ const BodySchema = z.object({
   telefone: z.string().nullable().optional(),
   endereco: z.string().nullable().optional(),
   nome_decisor: z.string().nullable().optional(),
+  decisor_linkedin: z.string().nullable().optional(),
+  decisor_telefone: z.string().nullable().optional(),
   cidade: z.string().nullable().optional(),
   cnpj: z.string().nullable().optional(),
+  // Etapa do pipeline: business | decisor | maturity | score. Default: legacy (roda tudo).
+  stage: z.enum(["business", "decisor", "maturity", "score", "all"]).optional().default("all"),
   // Valores previamente enriquecidos — usados como fallback caso o scrape novo falhe,
   // evitando que o score seja recalculado com null enquanto o DB mantém o valor antigo.
   prev_instagram_last_post_days: z.number().nullable().optional(),

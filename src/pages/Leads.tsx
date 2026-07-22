@@ -661,15 +661,19 @@ const Leads = () => {
         });
 
         if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
 
         const updates = data?.updates || {};
+        const statusKey = `enrich_${stage}_status`;
+        const stageStatus = updates[statusKey];
         const meaningfulKeys = Object.keys(updates).filter(
           (k) => !k.startsWith("enrich_") && updates[k] !== null && updates[k] !== undefined
         );
         if (Object.keys(updates).length > 0) {
-          await supabase.from("leads").update(updates).eq("id", lead.id);
+          const { error: updateError } = await supabase.from("leads").update(updates).eq("id", lead.id);
+          if (updateError) throw updateError;
           setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
-          if (meaningfulKeys.length > 0) ok++;
+          if (meaningfulKeys.length > 0 || stageStatus === "success") ok++;
           else fail++;
         } else {
           fail++;

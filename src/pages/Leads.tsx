@@ -620,19 +620,26 @@ const Leads = () => {
     toast({ title: `Tag "${tag.trim()}" adicionada a ${ids.length} leads` });
   };
 
-  const enrichLeads = useCallback(async () => {
+  const runEnrichStage = useCallback(async (stage: "business" | "decisor" | "maturity" | "score") => {
     const toEnrich = selected.size > 0 ? selectedLeads : filtered;
     if (toEnrich.length === 0) return;
 
+    const stageLabels: Record<string, string> = {
+      business: "Negócio",
+      decisor: "Decisor",
+      maturity: "Maturidade",
+      score: "Score IA",
+    };
+
     setEnriching(true);
-    let enriched = 0;
-    let failed = 0;
+    let ok = 0, fail = 0;
 
     for (const lead of toEnrich) {
-      setEnrichProgress(`${enriched + failed + 1}/${toEnrich.length} — ${lead.nome_empresa}`);
+      setEnrichProgress(`${stageLabels[stage]} ${ok + fail + 1}/${toEnrich.length} — ${lead.nome_empresa}`);
       try {
         const { data, error } = await supabase.functions.invoke("enrich-lead", {
           body: {
+            stage,
             nome_empresa: lead.nome_empresa,
             site: lead.site,
             instagram: lead.instagram,
@@ -640,9 +647,10 @@ const Leads = () => {
             telefone: lead.telefone,
             endereco: lead.endereco,
             nome_decisor: lead.nome_decisor,
+            decisor_linkedin: (lead as any).decisor_linkedin ?? null,
+            decisor_telefone: (lead as any).decisor_telefone ?? null,
             cidade: lead.cidade,
             cnpj: (lead as any).cnpj ?? null,
-            // Envia valores prévios para servirem de fallback caso o scrape novo falhe.
             prev_instagram_last_post_days: (lead as any).instagram_last_post_days ?? null,
             prev_instagram_profile_is_person: (lead as any).instagram_profile_is_person ?? null,
             prev_google_rating: (lead as any).google_rating ?? null,
@@ -655,34 +663,28 @@ const Leads = () => {
         if (error) throw error;
 
         const updates = data?.updates || {};
-        if (!updates.nome_decisor && data?.nome_decisor && data.nome_decisor !== "Não identificado") {
-          updates.nome_decisor = data.nome_decisor;
-        }
-
         if (Object.keys(updates).length > 0) {
           await supabase.from("leads").update(updates).eq("id", lead.id);
-          setLeads((prev) =>
-            prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l))
-          );
-          enriched++;
+          setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
+          ok++;
         } else {
-          failed++;
+          fail++;
         }
       } catch (e) {
-        console.error("Enrich error:", e);
-        failed++;
+        console.error(`Enrich ${stage} error:`, e);
+        fail++;
       }
-
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((r) => setTimeout(r, 800));
     }
 
     setEnriching(false);
     setEnrichProgress("");
     toast({
-      title: "Enriquecimento concluído",
-      description: `${enriched} leads enriquecidos, ${failed} sem dados novos.`,
+      title: `Etapa "${stageLabels[stage]}" concluída`,
+      description: `${ok} atualizados, ${fail} sem dados novos.`,
     });
   }, [selected, selectedLeads, filtered, toast]);
+
 
   const reAnalyzeLead = async (lead: Lead) => {
     const input = lead.score_breakdown as any;

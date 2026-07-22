@@ -813,7 +813,112 @@ async function enrichGeneralFields(
   }
 }
 
-// ─── Main handler ───
+// ─── ETAPA 2: Encontrar LinkedIn + telefone do decisor ───
+async function findDecisorContact(
+  nomeDecisor: string,
+  nomeEmpresa: string,
+  cidade: string | null,
+  firecrawlKey: string,
+  lovableKey: string,
+): Promise<{ linkedin: string | null; telefone: string | null; fonte: string | null }> {
+  const locQ = cidade ? ` "${cidade}"` : "";
+
+  // Cascata 1: IA + Google (searchWeb) para achar LinkedIn e/ou telefone pessoal
+  const searchText = await searchWeb(
+    `"${nomeDecisor}" "${nomeEmpresa}"${locQ} linkedin OR telefone OR whatsapp OR contato`,
+    firecrawlKey,
+  );
+
+  let linkedinUrl: string | null = null;
+  let telefone: string | null = null;
+  let fonte: string | null = null;
+
+  if (searchText.trim()) {
+    // Regex para LinkedIn profile
+    const liMatch = searchText.match(/https?:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/in\/[A-Za-z0-9\-_%]+/i);
+    if (liMatch) {
+      linkedinUrl = liMatch[0].replace(/[)\].,;]+$/, "");
+      fonte = "google_search";
+    }
+
+    // IA para extrair telefone pessoal
+    try {
+      const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: `Extraia telefone/WhatsApp pessoal de "${nomeDecisor}" (não da empresa). Se não houver telefone claramente pessoal, retorne null. Nunca invente.` },
+            { role: "user", content: searchText.slice(0, 8000) },
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "extract_phone",
+              parameters: {
+                type: "object",
+                properties: {
+                  telefone: { type: "string", nullable: true, description: "Telefone/WhatsApp pessoal em formato brasileiro" },
+                  linkedin: { type: "string", nullable: true, description: "URL do LinkedIn do decisor" },
+                },
+                required: ["telefone", "linkedin"],
+                additionalProperties: false,
+              },
+            },
+          }],
+          tool_choice: { type: "function", function: { name: "extract_phone" } },
+        }),
+      });
+      if (aiRes.ok) {
+        const data = await aiRes.json();
+        const args = JSON.parse(data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments || "{}");
+        if (args.telefone && String(args.telefone).trim().length > 5 && args.telefone !== "null") {
+          telefone = String(args.telefone).trim();
+          if (!fonte) fonte = "ia_google";
+        }
+        if (!linkedinUrl && args.linkedin && String(args.linkedin).includes("linkedin.com")) {
+          linkedinUrl = String(args.linkedin).trim();
+          if (!fonte) fonte = "ia_google";
+        }
+      }
+    } catch (e) {
+      console.error("[decisor-contact] IA erro:", e);
+    }
+  }
+
+  // Cascata 2: Apify LinkedIn scraper (só se ainda sem LinkedIn)
+  if (!linkedinUrl) {
+    const apifyKey = Deno.env.get("APIFY_API_KEY");
+    if (apifyKey) {
+      try {
+        const url = `https://api.apify.com/v2/acts/apimaestro~linkedin-profile-search-scraper/run-sync-get-dataset-items?token=${apifyKey}&timeout=45`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ queries: [`${nomeDecisor} ${nomeEmpresa}`], maxItems: 1 }),
+        });
+        if (res.ok) {
+          const items = await res.json();
+          const first = Array.isArray(items) ? items[0] : null;
+          const u = first?.link || first?.url || first?.profileUrl;
+          if (u && String(u).includes("linkedin.com/in/")) {
+            linkedinUrl = String(u).trim();
+            fonte = "apify";
+          }
+        } else {
+          console.error(`[decisor-contact] Apify HTTP ${res.status}`);
+        }
+      } catch (e) {
+        console.error("[decisor-contact] Apify erro:", e);
+      }
+    }
+  }
+
+  return { linkedin: linkedinUrl, telefone, fonte };
+}
+
+// ─── Handler ───
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -830,6 +935,7 @@ Deno.serve(async (req) => {
 
     const {
       nome_empresa, site, instagram, linkedin, telefone, endereco, nome_decisor, cidade, cnpj,
+      decisor_linkedin, decisor_telefone, stage,
       prev_instagram_last_post_days, prev_instagram_profile_is_person,
       prev_google_rating, prev_google_review_count, prev_google_owner_replied_recently, prev_google_profile_complete,
     } = parsed.data;
@@ -846,231 +952,228 @@ Deno.serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Google Places API key vem da tabela settings (não é um secret)
-    const GOOGLE_PLACES_KEY = await loadGooglePlacesKey();
-    console.log(`[enrich] Google Places key ${GOOGLE_PLACES_KEY ? "OK" : "AUSENTE"}`);
-
-    const updates: Record<string, string | null> = {};
-    const needsDecisor = !nome_decisor || nome_decisor === "Não identificado";
-
-    // Run general fields enrichment in parallel with CNPJ search
-    const generalPromise = enrichGeneralFields(
-      nome_empresa, cidade,
-      { site, instagram, linkedin, telefone, endereco },
-      FIRECRAWL_API_KEY, LOVABLE_API_KEY
-    );
-
-    // ── ESTÁGIO 1: CNPJ (timeout 8s) ──
-    let foundCnpj = cnpj || null;
-    if (!foundCnpj) {
-      foundCnpj = await withTimeout(
-        findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY),
-        STAGE_TIMEOUT_MS,
-        "findCnpj",
-      );
-    }
-    if (foundCnpj) {
-      updates.cnpj = foundCnpj;
-    }
-
-    // ── ESTÁGIO 2: B2BLeads + BrasilAPI QSA em paralelo (timeout 8s cada) ──
-    let decisorFound = false;
+    const updates: Record<string, any> = {};
     let decisorFonte: string | null = null;
-    if (foundCnpj) {
-      const [b2bData, brasilData] = await Promise.all([
-        withTimeout(scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "b2bleads"),
-        withTimeout(queryBrasilApi(foundCnpj), STAGE_TIMEOUT_MS, "brasilapi"),
+
+    // ═══════════════════ ETAPA 1: NEGÓCIO ═══════════════════
+    // CNPJ, endereço, telefone, nome do decisor via CNPJ (B2BLeads + BrasilAPI)
+    if (stage === "business" || stage === "all") {
+      const needsDecisor = !nome_decisor || nome_decisor === "Não identificado";
+
+      const generalPromise = enrichGeneralFields(
+        nome_empresa, cidade,
+        { site, instagram, linkedin, telefone, endereco },
+        FIRECRAWL_API_KEY, LOVABLE_API_KEY
+      );
+
+      let foundCnpj = cnpj || null;
+      if (!foundCnpj) {
+        foundCnpj = await withTimeout(
+          findCnpj(nome_empresa, cidade, telefone || null, endereco || null, FIRECRAWL_API_KEY),
+          STAGE_TIMEOUT_MS,
+          "findCnpj",
+        );
+      }
+      if (foundCnpj) updates.cnpj = foundCnpj;
+
+      let decisorFound = false;
+      if (foundCnpj) {
+        const [b2bData, brasilData] = await Promise.all([
+          withTimeout(scrapeB2bLeads(foundCnpj, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY), STAGE_TIMEOUT_MS, "b2bleads"),
+          withTimeout(queryBrasilApi(foundCnpj), STAGE_TIMEOUT_MS, "brasilapi"),
+        ]);
+
+        if (b2bData) {
+          if (!telefone && b2bData.telefone) updates.telefone = b2bData.telefone;
+          if (!endereco && b2bData.endereco) updates.endereco = b2bData.endereco;
+          if (!cidade && b2bData.cidade) updates.cidade = b2bData.cidade;
+          if (!site && b2bData.site) updates.site = b2bData.site;
+          if (!instagram && b2bData.instagram) updates.instagram = b2bData.instagram;
+          if (!linkedin && b2bData.linkedin) updates.linkedin = b2bData.linkedin;
+        }
+
+        let brasilQsaDecisor: string | null = null;
+        if (brasilData) {
+          const situacao = String(brasilData.situacao_cadastral ?? "").toUpperCase();
+          if (situacao !== "BAIXADA" && situacao !== "INAPTA") {
+            if (brasilData.qsa?.length) brasilQsaDecisor = selectDecisor(brasilData.qsa);
+            if (!telefone && !updates.telefone && brasilData.telefone?.trim()) {
+              updates.telefone = brasilData.telefone.trim();
+            }
+            if (!endereco && !updates.endereco && brasilData.logradouro) {
+              const parts = [brasilData.logradouro, brasilData.municipio, brasilData.uf].filter(Boolean);
+              if (parts.length) updates.endereco = parts.join(", ");
+            }
+            if (!cidade && !updates.cidade && brasilData.municipio) {
+              updates.cidade = brasilData.municipio;
+            }
+          }
+        }
+
+        if (needsDecisor) {
+          if (b2bData?.nome_decisor) {
+            updates.nome_decisor = b2bData.nome_decisor;
+            decisorFound = true;
+            decisorFonte = "b2bleads";
+          } else if (brasilQsaDecisor) {
+            updates.nome_decisor = brasilQsaDecisor;
+            decisorFound = true;
+            decisorFonte = "brasilapi_qsa";
+          }
+        }
+      }
+
+      const generalUpdates = await generalPromise;
+      for (const [k, v] of Object.entries(generalUpdates)) {
+        if (!updates[k]) updates[k] = v;
+      }
+
+      // fallback decisor via IA se ainda vazio (mantém compat com "all")
+      if (needsDecisor && !decisorFound && stage === "all") {
+        const igUrl = (updates.instagram as string) || instagram || null;
+        if (igUrl) {
+          const igDecisor = await withTimeout(
+            decisorFromInstagram(igUrl, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+            STAGE_TIMEOUT_MS, "IG-bio",
+          );
+          if (igDecisor) { updates.nome_decisor = igDecisor; decisorFound = true; decisorFonte = "instagram_bio"; }
+        }
+        if (!decisorFound) {
+          const revDecisor = await withTimeout(
+            decisorFromGoogleReviews(nome_empresa, (updates.cidade as string) || cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+            STAGE_TIMEOUT_MS, "GReviews",
+          );
+          if (revDecisor) { updates.nome_decisor = revDecisor; decisorFound = true; decisorFonte = "google_reviews"; }
+        }
+        if (!decisorFound) {
+          const aiDec = await withTimeout(
+            aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+            STAGE_TIMEOUT_MS, "ia_fallback",
+          );
+          if (aiDec) { updates.nome_decisor = aiDec; decisorFonte = "ia_fallback"; }
+        }
+      }
+
+      if (stage === "business") {
+        updates.enrich_business_at = new Date().toISOString();
+        updates.enrich_business_status = (updates.cnpj || updates.nome_decisor || updates.telefone || updates.endereco) ? "success" : "not_found";
+      }
+    }
+
+    // ═══════════════════ ETAPA 2: DECISOR ═══════════════════
+    if (stage === "decisor") {
+      const decisorNome = nome_decisor;
+      if (!decisorNome || decisorNome === "Não identificado") {
+        return new Response(JSON.stringify({
+          error: "Lead sem nome do decisor. Rode a etapa 'Negócio' primeiro.",
+          updates: { enrich_decisor_status: "skipped", enrich_decisor_at: new Date().toISOString() },
+        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      const contact = await withTimeout(
+        findDecisorContact(decisorNome, nome_empresa, cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
+        STAGE_TIMEOUT_MS * 2,
+        "decisor-contact",
+      );
+
+      if (contact?.linkedin && !decisor_linkedin) updates.decisor_linkedin = contact.linkedin;
+      if (contact?.telefone && !decisor_telefone) updates.decisor_telefone = contact.telefone;
+      decisorFonte = contact?.fonte || null;
+
+      updates.enrich_decisor_at = new Date().toISOString();
+      updates.enrich_decisor_status = (contact?.linkedin || contact?.telefone) ? "success" : "not_found";
+    }
+
+    // ═══════════════════ ETAPA 3: MATURIDADE ═══════════════════
+    // Instagram (Apify) + Google Maps profile — sinais de atividade digital
+    if (stage === "maturity" || stage === "all") {
+      const finalIg = (updates.instagram as string) || instagram || null;
+      const finalCid = (updates.cidade as string) || cidade || null;
+      const GOOGLE_PLACES_KEY = await loadGooglePlacesKey();
+
+      const [igData, gmapsData] = await Promise.all([
+        finalIg
+          ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY)
+          : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found" as const, raw: "" }),
+        scrapeGoogleMaps(nome_empresa, finalCid, GOOGLE_PLACES_KEY),
       ]);
 
-      // B2BLeads sempre preenche campos gerais quando disponíveis
-      if (b2bData) {
-        if (!telefone && b2bData.telefone) updates.telefone = b2bData.telefone;
-        if (!endereco && b2bData.endereco) updates.endereco = b2bData.endereco;
-        if (!cidade && b2bData.cidade) updates.cidade = b2bData.cidade;
-        if (!site && b2bData.site) updates.site = b2bData.site;
-        if (!instagram && b2bData.instagram) updates.instagram = b2bData.instagram;
-        if (!linkedin && b2bData.linkedin) updates.linkedin = b2bData.linkedin;
+      if (igData.instagram_last_post_days != null) updates.instagram_last_post_days = igData.instagram_last_post_days;
+      if (igData.instagram_profile_is_person != null) updates.instagram_profile_is_person = igData.instagram_profile_is_person;
+      if (gmapsData.google_rating != null) updates.google_rating = gmapsData.google_rating;
+      if (gmapsData.google_review_count != null) updates.google_review_count = gmapsData.google_review_count;
+      if (gmapsData.google_owner_replied_recently != null) updates.google_owner_replied_recently = gmapsData.google_owner_replied_recently;
+      if (gmapsData.google_profile_complete != null) updates.google_profile_complete = gmapsData.google_profile_complete;
+
+      updates.instagram_scrape_status = finalIg ? igData.status : "not_found";
+      updates.google_scrape_status = gmapsData.status;
+
+      updates.debug_raw_data = {
+        ts: new Date().toISOString(),
+        instagram: { url: finalIg, status: igData.status, raw_len: igData.raw.length, raw_preview: igData.raw.slice(0, 1500),
+          parsed: { instagram_last_post_days: igData.instagram_last_post_days, instagram_profile_is_person: igData.instagram_profile_is_person } },
+        google_maps: { query_nome: nome_empresa, query_cidade: finalCid, status: gmapsData.status, raw_len: gmapsData.raw.length, raw_preview: gmapsData.raw.slice(0, 1500),
+          parsed: { google_rating: gmapsData.google_rating, google_review_count: gmapsData.google_review_count, google_owner_replied_recently: gmapsData.google_owner_replied_recently, google_profile_complete: gmapsData.google_profile_complete } },
+      };
+
+      if (stage === "maturity") {
+        updates.enrich_maturity_at = new Date().toISOString();
+        updates.enrich_maturity_status = (igData.status === "success" || gmapsData.status === "success") ? "success" : "not_found";
       }
 
-      // BrasilAPI complementa campos gerais quando ativa
-      let brasilQsaDecisor: string | null = null;
-      if (brasilData) {
-        const situacao = String(brasilData.situacao_cadastral ?? "").toUpperCase();
-        if (situacao !== "BAIXADA" && situacao !== "INAPTA") {
-          if (brasilData.qsa?.length) brasilQsaDecisor = selectDecisor(brasilData.qsa);
-          if (!telefone && !updates.telefone && brasilData.telefone?.trim()) {
-            updates.telefone = brasilData.telefone.trim();
-          }
-          if (!endereco && !updates.endereco && brasilData.logradouro) {
-            const parts = [brasilData.logradouro, brasilData.municipio, brasilData.uf].filter(Boolean);
-            if (parts.length) updates.endereco = parts.join(", ");
-          }
-          if (!cidade && !updates.cidade && brasilData.municipio) {
-            updates.cidade = brasilData.municipio;
-          }
-        }
-      }
+      // Guarda pra reuso na etapa "all" score
+      (updates as any).__igData = igData;
+      (updates as any).__gmapsData = gmapsData;
+    }
 
-      // Prioridade do decisor: B2BLeads > BrasilAPI
-      if (needsDecisor) {
-        if (b2bData?.nome_decisor) {
-          updates.nome_decisor = b2bData.nome_decisor;
-          decisorFound = true;
-          decisorFonte = "b2bleads";
-        } else if (brasilQsaDecisor) {
-          updates.nome_decisor = brasilQsaDecisor;
-          decisorFound = true;
-          decisorFonte = "brasilapi_qsa";
-          console.log(`[QSA] Decisor selecionado: ${brasilQsaDecisor}`);
-        }
+    // ═══════════════════ ETAPA 4: SCORE COMERCIAL ═══════════════════
+    if (stage === "score" || stage === "all") {
+      const finalSite = (updates.site as string) || site || null;
+      const finalTel = (updates.telefone as string) || telefone || null;
+      const finalEnd = (updates.endereco as string) || endereco || null;
+      const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
+
+      const igData = (updates as any).__igData;
+      const gmapsData = (updates as any).__gmapsData;
+
+      const phoneType = detectPhoneType(finalTel);
+      if (phoneType) updates.phone_type = phoneType;
+
+      const scoreInput = {
+        phone_type: phoneType,
+        nome_decisor: finalDec,
+        instagram_last_post_days: igData?.instagram_last_post_days ?? updates.instagram_last_post_days ?? prev_instagram_last_post_days ?? null,
+        site: finalSite,
+        google_profile_complete: gmapsData?.google_profile_complete ?? updates.google_profile_complete ?? prev_google_profile_complete ?? null,
+        google_review_count: gmapsData?.google_review_count ?? updates.google_review_count ?? prev_google_review_count ?? null,
+        google_owner_replied_recently: gmapsData?.google_owner_replied_recently ?? updates.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? null,
+        google_rating: gmapsData?.google_rating ?? updates.google_rating ?? prev_google_rating ?? null,
+        instagram_profile_is_person: igData?.instagram_profile_is_person ?? updates.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? null,
+        cnpj: (updates.cnpj as string) || cnpj || null,
+        endereco: finalEnd,
+        nome_empresa,
+      };
+      const { commercial_score, tier } = computeCommercialScore(scoreInput);
+      updates.commercial_score = commercial_score;
+      updates.tier = tier;
+
+      if (stage === "score") {
+        updates.enrich_score_at = new Date().toISOString();
+        updates.enrich_score_status = "success";
       }
     }
 
-    // Merge campos gerais primeiro (para termos Instagram atualizado antes do próximo estágio)
-    const generalUpdates = await generalPromise;
-    for (const [key, val] of Object.entries(generalUpdates)) {
-      if (!updates[key]) {
-        updates[key] = val;
-      }
-    }
-
-    // ── ESTÁGIO 3: Instagram bio (se decisor ainda vazio) ──
-    if (needsDecisor && !decisorFound) {
-      const igUrl = (updates.instagram as string) || instagram || null;
-      if (igUrl) {
-        const igDecisor = await withTimeout(
-          decisorFromInstagram(igUrl, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
-          STAGE_TIMEOUT_MS,
-          "IG-bio",
-        );
-        if (igDecisor) {
-          updates.nome_decisor = igDecisor;
-          decisorFound = true;
-          decisorFonte = "instagram_bio";
-        }
-      }
-    }
-
-    // ── ESTÁGIO 4: Google reviews (se decisor ainda vazio) ──
-    if (needsDecisor && !decisorFound) {
-      const revDecisor = await withTimeout(
-        decisorFromGoogleReviews(nome_empresa, (updates.cidade as string) || cidade || null, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
-        STAGE_TIMEOUT_MS,
-        "GReviews",
-      );
-      if (revDecisor) {
-        updates.nome_decisor = revDecisor;
-        decisorFound = true;
-        decisorFonte = "google_reviews";
-      }
-    }
-
-    // ── ESTÁGIO 5: Fallback IA (último recurso) ──
-    if (needsDecisor && !decisorFound) {
-      const aiDecisor = await withTimeout(
-        aiFallbackDecisor(nome_empresa, cidade, FIRECRAWL_API_KEY, LOVABLE_API_KEY),
-        STAGE_TIMEOUT_MS,
-        "ia_fallback",
-      );
-      if (aiDecisor) {
-        updates.nome_decisor = aiDecisor;
-        decisorFonte = "ia_fallback";
-      }
-    }
-
-
-
-    // ── ESTÁGIO 5: Instagram deep scrape + Google Maps scrape (paralelo) ──
-    const finalSite = (updates.site as string) || site || null;
-    const finalIg = (updates.instagram as string) || instagram || null;
-    const finalTel = (updates.telefone as string) || telefone || null;
-    const finalEnd = (updates.endereco as string) || endereco || null;
-    const finalCid = (updates.cidade as string) || cidade || null;
-    const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
-
-    const [igData, gmapsData] = await Promise.all([
-      finalIg
-        ? scrapeInstagram(finalIg, nome_empresa, FIRECRAWL_API_KEY, LOVABLE_API_KEY)
-        : Promise.resolve({ instagram_last_post_days: null, instagram_profile_is_person: null, status: "not_found" as const, raw: "" }),
-      scrapeGoogleMaps(nome_empresa, finalCid, GOOGLE_PLACES_KEY),
-    ]);
-
-    // Log bruto para debug
-    console.log(`[enrich] IG status=${igData.status} raw_len=${igData.raw.length} | GMaps status=${gmapsData.status} raw_len=${gmapsData.raw.length}`);
-
-    // Só grava campos novos quando o scrape retornou algo (preserva valores antigos no DB em caso de falha)
-    if (igData.instagram_last_post_days != null) (updates as any).instagram_last_post_days = igData.instagram_last_post_days;
-    if (igData.instagram_profile_is_person != null) (updates as any).instagram_profile_is_person = igData.instagram_profile_is_person;
-    if (gmapsData.google_rating != null) (updates as any).google_rating = gmapsData.google_rating;
-    if (gmapsData.google_review_count != null) (updates as any).google_review_count = gmapsData.google_review_count;
-    if (gmapsData.google_owner_replied_recently != null) (updates as any).google_owner_replied_recently = gmapsData.google_owner_replied_recently;
-    if (gmapsData.google_profile_complete != null) (updates as any).google_profile_complete = gmapsData.google_profile_complete;
-
-    // Status de coleta (sempre atualizado — diferencia "não tem" de "falhou")
-    (updates as any).instagram_scrape_status = finalIg ? igData.status : "not_found";
-    (updates as any).google_scrape_status = gmapsData.status;
-
-    // Debug: payload bruto do último enrich
-    (updates as any).debug_raw_data = {
-      ts: new Date().toISOString(),
-      instagram: {
-        url: finalIg,
-        status: igData.status,
-        raw_len: igData.raw.length,
-        raw_preview: igData.raw.slice(0, 1500),
-        parsed: {
-          instagram_last_post_days: igData.instagram_last_post_days,
-          instagram_profile_is_person: igData.instagram_profile_is_person,
-        },
-      },
-      google_maps: {
-        query_nome: nome_empresa,
-        query_cidade: finalCid,
-        status: gmapsData.status,
-        raw_len: gmapsData.raw.length,
-        raw_preview: gmapsData.raw.slice(0, 1500),
-        parsed: {
-          google_rating: gmapsData.google_rating,
-          google_review_count: gmapsData.google_review_count,
-          google_owner_replied_recently: gmapsData.google_owner_replied_recently,
-          google_profile_complete: gmapsData.google_profile_complete,
-        },
-      },
-    };
-
-    // ── Phone type ──
-    const phoneType = detectPhoneType(finalTel);
-    if (phoneType) (updates as any).phone_type = phoneType;
-
-    // ── Commercial score + tier ──
-    // IMPORTANTE: quando o scrape novo falha (null), usa o valor prévio do lead como fallback.
-    // Isso evita o bug de "DB tem 42 reviews mas score foi computado com null".
-    const scoreInput = {
-      phone_type: phoneType,
-      nome_decisor: finalDec,
-      instagram_last_post_days: igData.instagram_last_post_days ?? prev_instagram_last_post_days ?? null,
-      site: finalSite,
-      google_profile_complete: gmapsData.google_profile_complete ?? prev_google_profile_complete ?? null,
-      google_review_count: gmapsData.google_review_count ?? prev_google_review_count ?? null,
-      google_owner_replied_recently: gmapsData.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? null,
-      google_rating: gmapsData.google_rating ?? prev_google_rating ?? null,
-      instagram_profile_is_person: igData.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? null,
-      cnpj: (updates.cnpj as string) || cnpj || null,
-      endereco: finalEnd,
-      nome_empresa,
-    };
-    console.log(`[score] input:`, JSON.stringify(scoreInput));
-    const { commercial_score, tier } = computeCommercialScore(scoreInput);
-    (updates as any).commercial_score = commercial_score;
-    (updates as any).tier = tier;
+    // Cleanup campos internos
+    delete (updates as any).__igData;
+    delete (updates as any).__gmapsData;
 
     return new Response(
       JSON.stringify({
+        stage,
         nome_decisor: updates.nome_decisor || nome_decisor || "Não identificado",
-        cargo: "",
         decisor_fonte: decisorFonte,
-        commercial_score,
-        tier,
+        commercial_score: updates.commercial_score,
+        tier: updates.tier,
         updates,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

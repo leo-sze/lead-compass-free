@@ -663,10 +663,14 @@ const Leads = () => {
         if (error) throw error;
 
         const updates = data?.updates || {};
+        const meaningfulKeys = Object.keys(updates).filter(
+          (k) => !k.startsWith("enrich_") && updates[k] !== null && updates[k] !== undefined
+        );
         if (Object.keys(updates).length > 0) {
           await supabase.from("leads").update(updates).eq("id", lead.id);
           setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...updates } : l)));
-          ok++;
+          if (meaningfulKeys.length > 0) ok++;
+          else fail++;
         } else {
           fail++;
         }

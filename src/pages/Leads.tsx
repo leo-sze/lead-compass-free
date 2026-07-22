@@ -1058,25 +1058,31 @@ const Leads = () => {
               </Popover>
             </>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={enrichLeads}
-            disabled={enriching}
-            className="border-accent/50 text-accent hover:bg-accent/10"
-          >
-            {enriching ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                {enrichProgress}
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-1" />
-                Enrich List {selected.size > 0 ? `(${selected.size})` : `(${filtered.length})`}
-              </>
+          <div className="flex items-center gap-1 border border-accent/30 rounded-md px-2 py-1 bg-accent/5">
+            <span className="text-[10px] uppercase text-muted-foreground mr-1">Enriquecer:</span>
+            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("business")} disabled={enriching}
+              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="CNPJ, endereço, telefone e nome do decisor">
+              <Building2 className="h-3.5 w-3.5 mr-1" /> Negócio
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("decisor")} disabled={enriching}
+              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="LinkedIn e telefone do decisor">
+              <User className="h-3.5 w-3.5 mr-1" /> Decisor
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("maturity")} disabled={enriching}
+              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="Instagram, site e Google Maps">
+              <Instagram className="h-3.5 w-3.5 mr-1" /> Maturidade
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("score")} disabled={enriching}
+              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="Recalcular score comercial">
+              <Sparkles className="h-3.5 w-3.5 mr-1" /> Score IA
+            </Button>
+            {enriching && (
+              <span className="text-[11px] text-muted-foreground ml-1 flex items-center">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" /> {enrichProgress}
+              </span>
             )}
-          </Button>
+          </div>
+
           <Button
             size="sm"
             onClick={bulkScoreLeads}

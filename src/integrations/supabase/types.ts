@@ -45,7 +45,17 @@ export type Database = {
           commercial_score: number | null
           created_at: string
           debug_raw_data: Json | null
+          decisor_linkedin: string | null
+          decisor_telefone: string | null
           endereco: string | null
+          enrich_business_at: string | null
+          enrich_business_status: string | null
+          enrich_decisor_at: string | null
+          enrich_decisor_status: string | null
+          enrich_maturity_at: string | null
+          enrich_maturity_status: string | null
+          enrich_score_at: string | null
+          enrich_score_status: string | null
           fonte: string | null
           google_owner_replied_recently: boolean | null
           google_profile_complete: boolean | null
@@ -85,7 +95,17 @@ export type Database = {
           commercial_score?: number | null
           created_at?: string
           debug_raw_data?: Json | null
+          decisor_linkedin?: string | null
+          decisor_telefone?: string | null
           endereco?: string | null
+          enrich_business_at?: string | null
+          enrich_business_status?: string | null
+          enrich_decisor_at?: string | null
+          enrich_decisor_status?: string | null
+          enrich_maturity_at?: string | null
+          enrich_maturity_status?: string | null
+          enrich_score_at?: string | null
+          enrich_score_status?: string | null
           fonte?: string | null
           google_owner_replied_recently?: boolean | null
           google_profile_complete?: boolean | null
@@ -125,7 +145,17 @@ export type Database = {
           commercial_score?: number | null
           created_at?: string
           debug_raw_data?: Json | null
+          decisor_linkedin?: string | null
+          decisor_telefone?: string | null
           endereco?: string | null
+          enrich_business_at?: string | null
+          enrich_business_status?: string | null
+          enrich_decisor_at?: string | null
+          enrich_decisor_status?: string | null
+          enrich_maturity_at?: string | null
+          enrich_maturity_status?: string | null
+          enrich_score_at?: string | null
+          enrich_score_status?: string | null
           fonte?: string | null
           google_owner_replied_recently?: boolean | null
           google_profile_complete?: boolean | null

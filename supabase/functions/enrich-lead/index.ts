@@ -3,10 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 async function loadGooglePlacesKey(): Promise<string | null> {
   try {
-    const url = Deno.env.get("SUPABASE_URL");
-    const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!url || !svc) return null;
-    const sb = createClient(url, svc);
+    const sb = createServiceClient();
+    if (!sb) return null;
     const { data } = await sb.from("settings").select("value").eq("key", "google_places_api_key").maybeSingle();
     const k = data?.value?.trim();
     return k && k.length > 10 ? k : null;
@@ -14,6 +12,13 @@ async function loadGooglePlacesKey(): Promise<string | null> {
     console.error("[settings] erro lendo google_places_api_key:", e);
     return null;
   }
+}
+
+function createServiceClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !svc) return null;
+  return createClient(url, svc);
 }
 
 const corsHeaders = {
@@ -50,19 +55,24 @@ const CNPJ_REGEX = /\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;
 // ─── Helper: Firecrawl search ───
 async function searchWeb(query: string, apiKey: string): Promise<string> {
   try {
-    const res = await fetch("https://api.firecrawl.dev/v1/search", {
+    const res = await fetch("https://api.firecrawl.dev/v2/search", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query, limit: 5, scrapeOptions: { formats: ["markdown"] } }),
+      body: JSON.stringify({ query, limit: 5, lang: "pt", country: "br", scrapeOptions: { formats: ["markdown"] } }),
       signal: AbortSignal.timeout(12000),
     });
     if (res.ok) {
       const data = await res.json();
-      return (data.data || [])
-        .map((r: any) => `--- ${r.url} ---\n${(r.markdown || r.description || "").slice(0, 2000)}`)
+      const results: any[] =
+        (Array.isArray(data?.data) ? data.data : null) ||
+        (Array.isArray(data?.data?.web) ? data.data.web : null) ||
+        (Array.isArray(data?.web) ? data.web : null) ||
+        [];
+      return results
+        .map((r: any) => `--- ${r.url || "sem-url"} ---\n${r.title || ""}\n${(r.markdown || r.description || r.html || "").slice(0, 2200)}`)
         .join("\n\n");
     }
     const text = await res.text();
@@ -76,13 +86,14 @@ async function searchWeb(query: string, apiKey: string): Promise<string> {
 // ─── Helper: Firecrawl scrape ───
 async function scrapeUrl(url: string, apiKey: string): Promise<string> {
   try {
-    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    const targetUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+      body: JSON.stringify({ url: targetUrl, formats: ["markdown"], onlyMainContent: true }),
       signal: AbortSignal.timeout(12000),
     });
     if (res.ok) {
@@ -251,6 +262,50 @@ async function findCnpj(
 
   console.log("[CNPJ] Não encontrado após todas as estratégias");
   return null;
+}
+
+async function findExistingLeadData(nome: string, telefone: string | null, site: string | null) {
+  try {
+    const sb = createServiceClient();
+    if (!sb) return null;
+    const phoneDigits = normalizePhoneDigits(telefone);
+    const domain = extractDomain(site);
+    const cleanName = nome.replace(/\s+[-|–—].*$/, "").trim();
+
+    const filters: string[] = [];
+    if (cleanName.length >= 4) filters.push(`nome_empresa.ilike.%${cleanName.replace(/[%_,]/g, "")}%`);
+    if (domain) filters.push(`site.ilike.%${domain.replace(/[%_,]/g, "")}%`);
+    if (phoneDigits) filters.push(`telefone.ilike.%${phoneDigits.slice(-4)}%`);
+
+    let query = sb
+      .from("leads")
+      .select("nome_empresa,cnpj,nome_decisor,telefone,endereco,cidade,site,instagram,linkedin,decisor_linkedin,decisor_telefone,google_rating,google_review_count,google_owner_replied_recently,google_profile_complete,instagram_last_post_days,instagram_profile_is_person,phone_type")
+      .limit(20);
+
+    if (filters.length > 0) query = query.or(filters.join(","));
+    const { data } = await query;
+    const rows = Array.isArray(data) ? data : [];
+    const ranked = rows.filter((row: any) => {
+      const rowPhone = normalizePhoneDigits(row.telefone || null);
+      const rowDomain = extractDomain(row.site || null);
+      const rowName = String(row.nome_empresa || "").toLowerCase();
+      const nameHit = cleanName.length >= 4 && rowName.includes(cleanName.toLowerCase());
+      return (!!phoneDigits && rowPhone === phoneDigits) || (!!domain && rowDomain === domain) || nameHit;
+    });
+
+    const hit =
+      ranked.find((row: any) => row.cnpj && row.nome_decisor) ||
+      ranked.find((row: any) => row.cnpj) ||
+      ranked.find((row: any) => row.nome_decisor) ||
+      ranked.find((row: any) => row.instagram || row.site || row.telefone) ||
+      ranked[0] ||
+      null;
+    if (hit) console.log(`[DB-fallback] dados existentes encontrados para ${nome}`);
+    return hit;
+  } catch (e) {
+    console.error("[DB-fallback] erro:", e);
+    return null;
+  }
 }
 
 // ─── ESTÁGIO 2: B2BLeads scrape ───
@@ -1006,6 +1061,7 @@ Deno.serve(async (req) => {
     // CNPJ, endereço, telefone, nome do decisor via CNPJ (B2BLeads + BrasilAPI)
     if (stage === "business" || stage === "all") {
       const needsDecisor = !nome_decisor || nome_decisor === "Não identificado";
+      const existingData = await findExistingLeadData(nome_empresa, telefone || null, site || null);
 
       const generalPromise = enrichGeneralFields(
         nome_empresa, cidade,
@@ -1014,6 +1070,7 @@ Deno.serve(async (req) => {
       );
 
       let foundCnpj = cnpj || null;
+      if (!foundCnpj && existingData?.cnpj) foundCnpj = String(existingData.cnpj);
       if (!foundCnpj) {
         foundCnpj = await withTimeout(
           findCnpj(nome_empresa, cidade, telefone || null, endereco || null, site || null, FIRECRAWL_API_KEY),
@@ -1022,6 +1079,19 @@ Deno.serve(async (req) => {
         );
       }
       if (foundCnpj) updates.cnpj = foundCnpj;
+
+      if (existingData) {
+        if (!telefone && existingData.telefone) updates.telefone = existingData.telefone;
+        if (!endereco && existingData.endereco) updates.endereco = existingData.endereco;
+        if (!cidade && existingData.cidade) updates.cidade = existingData.cidade;
+        if (!site && existingData.site) updates.site = existingData.site;
+        if (!instagram && existingData.instagram) updates.instagram = existingData.instagram;
+        if (!linkedin && existingData.linkedin) updates.linkedin = existingData.linkedin;
+        if (needsDecisor && existingData.nome_decisor) {
+          updates.nome_decisor = existingData.nome_decisor;
+          decisorFonte = "base_existente";
+        }
+      }
 
       let decisorFound = false;
       if (foundCnpj) {
@@ -1076,20 +1146,17 @@ Deno.serve(async (req) => {
       }
 
       // Google Places como fonte rica para leads sem CNPJ/site/telefone
-      const stillMissingContact = !(updates.telefone || telefone) || !(updates.site || site) || !(updates.endereco || endereco);
       let businessVerifiedByMaps = false;
-      if (stillMissingContact) {
-        const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
-        const places = await withTimeout(
-          scrapeGoogleMaps(nome_empresa, (updates.cidade as string) || cidade || null, GOOGLE_PLACES_KEY_B),
-          STAGE_TIMEOUT_MS, "gmaps-business",
-        );
-        if (places?.status === "success") {
-          businessVerifiedByMaps = true;
-          if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
-          if (!site && !updates.site && places.site) updates.site = places.site;
-          if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
-        }
+      const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
+      const places = await withTimeout(
+        scrapeGoogleMaps(nome_empresa, (updates.cidade as string) || cidade || null, GOOGLE_PLACES_KEY_B),
+        STAGE_TIMEOUT_MS, "gmaps-business",
+      );
+      if (places?.status === "success") {
+        businessVerifiedByMaps = true;
+        if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
+        if (!site && !updates.site && places.site) updates.site = places.site;
+        if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
       }
 
       // Fallback decisor via IA / reviews / IG bio — roda em business e all
@@ -1127,11 +1194,13 @@ Deno.serve(async (req) => {
     // ═══════════════════ ETAPA 2: DECISOR ═══════════════════
     if (stage === "decisor") {
       let decisorNome = nome_decisor && nome_decisor !== "Não identificado" ? nome_decisor : null;
+      const existingData = !decisorNome ? await findExistingLeadData(nome_empresa, telefone || null, site || null) : null;
 
       // Se o usuário roda direto a etapa Decisor em um lead sem CNPJ, tenta achar CNPJ/QSA antes
       // de cair nos fallbacks menos confiáveis. Isso evita que a etapa pare sem tentar a Receita.
       if (!decisorNome) {
         let foundCnpj = cnpj || null;
+        if (!foundCnpj && existingData?.cnpj) foundCnpj = String(existingData.cnpj);
         if (!foundCnpj) {
           foundCnpj = await withTimeout(
             findCnpj(nome_empresa, cidade, telefone || null, endereco || null, site || null, FIRECRAWL_API_KEY),
@@ -1151,6 +1220,12 @@ Deno.serve(async (req) => {
             }
           }
         }
+      }
+
+      if (!decisorNome && existingData?.nome_decisor) {
+        decisorNome = String(existingData.nome_decisor);
+        updates.nome_decisor = decisorNome;
+        decisorFonte = "base_existente";
       }
 
       // Tenta descobrir se ainda vazio (IG bio -> Google reviews -> IA)
@@ -1188,6 +1263,15 @@ Deno.serve(async (req) => {
     // ═══════════════════ ETAPA 3: MATURIDADE ═══════════════════
     // Instagram (Apify) + Google Maps profile — sinais de atividade digital
     if (stage === "maturity" || stage === "all") {
+      const socialUpdates = await enrichGeneralFields(
+        nome_empresa, cidade,
+        { site, instagram, linkedin, telefone, endereco },
+        FIRECRAWL_API_KEY, LOVABLE_API_KEY,
+      );
+      for (const [k, v] of Object.entries(socialUpdates)) {
+        if (!updates[k]) updates[k] = v;
+      }
+
       const finalIg = (updates.instagram as string) || instagram || null;
       const finalCid = (updates.cidade as string) || cidade || null;
       const GOOGLE_PLACES_KEY = await loadGooglePlacesKey();
@@ -1205,6 +1289,9 @@ Deno.serve(async (req) => {
       if (gmapsData.google_review_count != null) updates.google_review_count = gmapsData.google_review_count;
       if (gmapsData.google_owner_replied_recently != null) updates.google_owner_replied_recently = gmapsData.google_owner_replied_recently;
       if (gmapsData.google_profile_complete != null) updates.google_profile_complete = gmapsData.google_profile_complete;
+      if (!telefone && !updates.telefone && gmapsData.telefone) updates.telefone = gmapsData.telefone;
+      if (!site && !updates.site && gmapsData.site) updates.site = gmapsData.site;
+      if (!endereco && !updates.endereco && gmapsData.endereco) updates.endereco = gmapsData.endereco;
 
       updates.instagram_scrape_status = finalIg ? igData.status : "not_found";
       updates.google_scrape_status = gmapsData.status;
@@ -1229,10 +1316,11 @@ Deno.serve(async (req) => {
 
     // ═══════════════════ ETAPA 4: SCORE COMERCIAL ═══════════════════
     if (stage === "score" || stage === "all") {
-      const finalSite = (updates.site as string) || site || null;
-      const finalTel = (updates.telefone as string) || telefone || null;
-      const finalEnd = (updates.endereco as string) || endereco || null;
-      const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
+      const existingData = await findExistingLeadData(nome_empresa, telefone || null, site || null);
+      const finalSite = (updates.site as string) || site || existingData?.site || null;
+      const finalTel = (updates.telefone as string) || telefone || existingData?.telefone || null;
+      const finalEnd = (updates.endereco as string) || endereco || existingData?.endereco || null;
+      const finalDec = (updates.nome_decisor as string) || nome_decisor || existingData?.nome_decisor || null;
 
       const igData = (updates as any).__igData;
       const gmapsData = (updates as any).__gmapsData;
@@ -1243,14 +1331,14 @@ Deno.serve(async (req) => {
       const scoreInput = {
         phone_type: phoneType,
         nome_decisor: finalDec,
-        instagram_last_post_days: igData?.instagram_last_post_days ?? updates.instagram_last_post_days ?? prev_instagram_last_post_days ?? null,
+        instagram_last_post_days: igData?.instagram_last_post_days ?? updates.instagram_last_post_days ?? prev_instagram_last_post_days ?? existingData?.instagram_last_post_days ?? null,
         site: finalSite,
-        google_profile_complete: gmapsData?.google_profile_complete ?? updates.google_profile_complete ?? prev_google_profile_complete ?? null,
-        google_review_count: gmapsData?.google_review_count ?? updates.google_review_count ?? prev_google_review_count ?? null,
-        google_owner_replied_recently: gmapsData?.google_owner_replied_recently ?? updates.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? null,
-        google_rating: gmapsData?.google_rating ?? updates.google_rating ?? prev_google_rating ?? null,
-        instagram_profile_is_person: igData?.instagram_profile_is_person ?? updates.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? null,
-        cnpj: (updates.cnpj as string) || cnpj || null,
+        google_profile_complete: gmapsData?.google_profile_complete ?? updates.google_profile_complete ?? prev_google_profile_complete ?? existingData?.google_profile_complete ?? null,
+        google_review_count: gmapsData?.google_review_count ?? updates.google_review_count ?? prev_google_review_count ?? existingData?.google_review_count ?? null,
+        google_owner_replied_recently: gmapsData?.google_owner_replied_recently ?? updates.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? existingData?.google_owner_replied_recently ?? null,
+        google_rating: gmapsData?.google_rating ?? updates.google_rating ?? prev_google_rating ?? existingData?.google_rating ?? null,
+        instagram_profile_is_person: igData?.instagram_profile_is_person ?? updates.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? existingData?.instagram_profile_is_person ?? null,
+        cnpj: (updates.cnpj as string) || cnpj || existingData?.cnpj || null,
         endereco: finalEnd,
         nome_empresa,
       };

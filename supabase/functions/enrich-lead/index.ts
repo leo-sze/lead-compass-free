@@ -293,7 +293,13 @@ async function findExistingLeadData(nome: string, telefone: string | null, site:
       return (!!phoneDigits && rowPhone === phoneDigits) || (!!domain && rowDomain === domain) || nameHit;
     });
 
-    const hit = ranked.find((row: any) => row.cnpj || row.nome_decisor || row.telefone || row.site || row.instagram) || ranked[0] || null;
+    const hit =
+      ranked.find((row: any) => row.cnpj && row.nome_decisor) ||
+      ranked.find((row: any) => row.cnpj) ||
+      ranked.find((row: any) => row.nome_decisor) ||
+      ranked.find((row: any) => row.instagram || row.site || row.telefone) ||
+      ranked[0] ||
+      null;
     if (hit) console.log(`[DB-fallback] dados existentes encontrados para ${nome}`);
     return hit;
   } catch (e) {

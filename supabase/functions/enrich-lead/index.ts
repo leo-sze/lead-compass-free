@@ -264,6 +264,41 @@ async function findCnpj(
   return null;
 }
 
+async function findExistingLeadData(nome: string, telefone: string | null, site: string | null) {
+  try {
+    const sb = createServiceClient();
+    if (!sb) return null;
+    const phoneDigits = normalizePhoneDigits(telefone);
+    const domain = extractDomain(site);
+    const cleanName = nome.replace(/\s+[-|–—].*$/, "").trim();
+
+    const filters: string[] = [];
+    if (cleanName.length >= 4) filters.push(`nome_empresa.ilike.%${cleanName.replace(/[%_,]/g, "")} %`);
+    if (domain) filters.push(`site.ilike.%${domain.replace(/[%_,]/g, "")}%`);
+
+    let query = sb
+      .from("leads")
+      .select("cnpj,nome_decisor,telefone,endereco,cidade,site,instagram,linkedin,decisor_linkedin,decisor_telefone,google_rating,google_review_count,google_owner_replied_recently,google_profile_complete,instagram_last_post_days,instagram_profile_is_person,phone_type")
+      .limit(20);
+
+    if (filters.length > 0) query = query.or(filters.join(","));
+    const { data } = await query;
+    const rows = Array.isArray(data) ? data : [];
+    const ranked = rows.filter((row: any) => {
+      const rowPhone = normalizePhoneDigits(row.telefone || null);
+      const rowDomain = extractDomain(row.site || null);
+      return (!!phoneDigits && rowPhone === phoneDigits) || (!!domain && rowDomain === domain) || (!!row.cnpj && cleanName.length >= 4);
+    });
+
+    const hit = ranked.find((row: any) => row.cnpj || row.nome_decisor || row.telefone || row.site || row.instagram) || ranked[0] || null;
+    if (hit) console.log(`[DB-fallback] dados existentes encontrados para ${nome}`);
+    return hit;
+  } catch (e) {
+    console.error("[DB-fallback] erro:", e);
+    return null;
+  }
+}
+
 // ─── ESTÁGIO 2: B2BLeads scrape ───
 interface B2bLeadsData {
   nome_decisor: string | null;

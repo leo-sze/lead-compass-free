@@ -1311,10 +1311,10 @@ Deno.serve(async (req) => {
     // ═══════════════════ ETAPA 4: SCORE COMERCIAL ═══════════════════
     if (stage === "score" || stage === "all") {
       const existingData = await findExistingLeadData(nome_empresa, telefone || null, site || null);
-      const finalSite = (updates.site as string) || site || null;
-      const finalTel = (updates.telefone as string) || telefone || null;
-      const finalEnd = (updates.endereco as string) || endereco || null;
-      const finalDec = (updates.nome_decisor as string) || nome_decisor || null;
+      const finalSite = (updates.site as string) || site || existingData?.site || null;
+      const finalTel = (updates.telefone as string) || telefone || existingData?.telefone || null;
+      const finalEnd = (updates.endereco as string) || endereco || existingData?.endereco || null;
+      const finalDec = (updates.nome_decisor as string) || nome_decisor || existingData?.nome_decisor || null;
 
       const igData = (updates as any).__igData;
       const gmapsData = (updates as any).__gmapsData;
@@ -1332,7 +1332,7 @@ Deno.serve(async (req) => {
         google_owner_replied_recently: gmapsData?.google_owner_replied_recently ?? updates.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? existingData?.google_owner_replied_recently ?? null,
         google_rating: gmapsData?.google_rating ?? updates.google_rating ?? prev_google_rating ?? existingData?.google_rating ?? null,
         instagram_profile_is_person: igData?.instagram_profile_is_person ?? updates.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? existingData?.instagram_profile_is_person ?? null,
-        cnpj: (updates.cnpj as string) || cnpj || null,
+        cnpj: (updates.cnpj as string) || cnpj || existingData?.cnpj || null,
         endereco: finalEnd,
         nome_empresa,
       };

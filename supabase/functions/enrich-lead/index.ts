@@ -279,7 +279,7 @@ async function findExistingLeadData(nome: string, telefone: string | null, site:
 
     let query = sb
       .from("leads")
-      .select("cnpj,nome_decisor,telefone,endereco,cidade,site,instagram,linkedin,decisor_linkedin,decisor_telefone,google_rating,google_review_count,google_owner_replied_recently,google_profile_complete,instagram_last_post_days,instagram_profile_is_person,phone_type")
+      .select("nome_empresa,cnpj,nome_decisor,telefone,endereco,cidade,site,instagram,linkedin,decisor_linkedin,decisor_telefone,google_rating,google_review_count,google_owner_replied_recently,google_profile_complete,instagram_last_post_days,instagram_profile_is_person,phone_type")
       .limit(20);
 
     if (filters.length > 0) query = query.or(filters.join(","));
@@ -288,7 +288,9 @@ async function findExistingLeadData(nome: string, telefone: string | null, site:
     const ranked = rows.filter((row: any) => {
       const rowPhone = normalizePhoneDigits(row.telefone || null);
       const rowDomain = extractDomain(row.site || null);
-      return (!!phoneDigits && rowPhone === phoneDigits) || (!!domain && rowDomain === domain) || (!!row.cnpj && cleanName.length >= 4);
+      const rowName = String(row.nome_empresa || "").toLowerCase();
+      const nameHit = cleanName.length >= 4 && rowName.includes(cleanName.toLowerCase());
+      return (!!phoneDigits && rowPhone === phoneDigits) || (!!domain && rowDomain === domain) || nameHit;
     });
 
     const hit = ranked.find((row: any) => row.cnpj || row.nome_decisor || row.telefone || row.site || row.instagram) || ranked[0] || null;

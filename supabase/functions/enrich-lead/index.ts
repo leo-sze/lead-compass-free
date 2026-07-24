@@ -50,19 +50,24 @@ const CNPJ_REGEX = /\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[\/\s]?\d{4}[-\s]?\d{2}/g;
 // ─── Helper: Firecrawl search ───
 async function searchWeb(query: string, apiKey: string): Promise<string> {
   try {
-    const res = await fetch("https://api.firecrawl.dev/v1/search", {
+    const res = await fetch("https://api.firecrawl.dev/v2/search", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ query, limit: 5, scrapeOptions: { formats: ["markdown"] } }),
+      body: JSON.stringify({ query, limit: 5, lang: "pt", country: "br", scrapeOptions: { formats: ["markdown"] } }),
       signal: AbortSignal.timeout(12000),
     });
     if (res.ok) {
       const data = await res.json();
-      return (data.data || [])
-        .map((r: any) => `--- ${r.url} ---\n${(r.markdown || r.description || "").slice(0, 2000)}`)
+      const results: any[] =
+        (Array.isArray(data?.data) ? data.data : null) ||
+        (Array.isArray(data?.data?.web) ? data.data.web : null) ||
+        (Array.isArray(data?.web) ? data.web : null) ||
+        [];
+      return results
+        .map((r: any) => `--- ${r.url || "sem-url"} ---\n${r.title || ""}\n${(r.markdown || r.description || r.html || "").slice(0, 2200)}`)
         .join("\n\n");
     }
     const text = await res.text();
@@ -76,13 +81,14 @@ async function searchWeb(query: string, apiKey: string): Promise<string> {
 // ─── Helper: Firecrawl scrape ───
 async function scrapeUrl(url: string, apiKey: string): Promise<string> {
   try {
-    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    const targetUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+      body: JSON.stringify({ url: targetUrl, formats: ["markdown"], onlyMainContent: true }),
       signal: AbortSignal.timeout(12000),
     });
     if (res.ok) {

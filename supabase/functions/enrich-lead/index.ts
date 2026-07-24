@@ -1070,6 +1070,7 @@ Deno.serve(async (req) => {
       );
 
       let foundCnpj = cnpj || null;
+      if (!foundCnpj && existingData?.cnpj) foundCnpj = String(existingData.cnpj);
       if (!foundCnpj) {
         foundCnpj = await withTimeout(
           findCnpj(nome_empresa, cidade, telefone || null, endereco || null, site || null, FIRECRAWL_API_KEY),
@@ -1077,7 +1078,6 @@ Deno.serve(async (req) => {
           "findCnpj",
         );
       }
-      if (!foundCnpj && existingData?.cnpj) foundCnpj = String(existingData.cnpj);
       if (foundCnpj) updates.cnpj = foundCnpj;
 
       if (existingData) {

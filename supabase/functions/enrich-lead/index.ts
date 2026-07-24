@@ -1053,6 +1053,7 @@ Deno.serve(async (req) => {
     // CNPJ, endereço, telefone, nome do decisor via CNPJ (B2BLeads + BrasilAPI)
     if (stage === "business" || stage === "all") {
       const needsDecisor = !nome_decisor || nome_decisor === "Não identificado";
+      const existingData = await findExistingLeadData(nome_empresa, telefone || null, site || null);
 
       const generalPromise = enrichGeneralFields(
         nome_empresa, cidade,
@@ -1068,7 +1069,21 @@ Deno.serve(async (req) => {
           "findCnpj",
         );
       }
+      if (!foundCnpj && existingData?.cnpj) foundCnpj = String(existingData.cnpj);
       if (foundCnpj) updates.cnpj = foundCnpj;
+
+      if (existingData) {
+        if (!telefone && existingData.telefone) updates.telefone = existingData.telefone;
+        if (!endereco && existingData.endereco) updates.endereco = existingData.endereco;
+        if (!cidade && existingData.cidade) updates.cidade = existingData.cidade;
+        if (!site && existingData.site) updates.site = existingData.site;
+        if (!instagram && existingData.instagram) updates.instagram = existingData.instagram;
+        if (!linkedin && existingData.linkedin) updates.linkedin = existingData.linkedin;
+        if (needsDecisor && existingData.nome_decisor) {
+          updates.nome_decisor = existingData.nome_decisor;
+          decisorFonte = "base_existente";
+        }
+      }
 
       let decisorFound = false;
       if (foundCnpj) {
@@ -1123,20 +1138,17 @@ Deno.serve(async (req) => {
       }
 
       // Google Places como fonte rica para leads sem CNPJ/site/telefone
-      const stillMissingContact = !(updates.telefone || telefone) || !(updates.site || site) || !(updates.endereco || endereco);
       let businessVerifiedByMaps = false;
-      if (stillMissingContact) {
-        const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
-        const places = await withTimeout(
-          scrapeGoogleMaps(nome_empresa, (updates.cidade as string) || cidade || null, GOOGLE_PLACES_KEY_B),
-          STAGE_TIMEOUT_MS, "gmaps-business",
-        );
-        if (places?.status === "success") {
-          businessVerifiedByMaps = true;
-          if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
-          if (!site && !updates.site && places.site) updates.site = places.site;
-          if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
-        }
+      const GOOGLE_PLACES_KEY_B = await loadGooglePlacesKey();
+      const places = await withTimeout(
+        scrapeGoogleMaps(nome_empresa, (updates.cidade as string) || cidade || null, GOOGLE_PLACES_KEY_B),
+        STAGE_TIMEOUT_MS, "gmaps-business",
+      );
+      if (places?.status === "success") {
+        businessVerifiedByMaps = true;
+        if (!telefone && !updates.telefone && places.telefone) updates.telefone = places.telefone;
+        if (!site && !updates.site && places.site) updates.site = places.site;
+        if (!endereco && !updates.endereco && places.endereco) updates.endereco = places.endereco;
       }
 
       // Fallback decisor via IA / reviews / IG bio — roda em business e all
@@ -1174,11 +1186,13 @@ Deno.serve(async (req) => {
     // ═══════════════════ ETAPA 2: DECISOR ═══════════════════
     if (stage === "decisor") {
       let decisorNome = nome_decisor && nome_decisor !== "Não identificado" ? nome_decisor : null;
+      const existingData = !decisorNome ? await findExistingLeadData(nome_empresa, telefone || null, site || null) : null;
 
       // Se o usuário roda direto a etapa Decisor em um lead sem CNPJ, tenta achar CNPJ/QSA antes
       // de cair nos fallbacks menos confiáveis. Isso evita que a etapa pare sem tentar a Receita.
       if (!decisorNome) {
         let foundCnpj = cnpj || null;
+        if (!foundCnpj && existingData?.cnpj) foundCnpj = String(existingData.cnpj);
         if (!foundCnpj) {
           foundCnpj = await withTimeout(
             findCnpj(nome_empresa, cidade, telefone || null, endereco || null, site || null, FIRECRAWL_API_KEY),
@@ -1198,6 +1212,12 @@ Deno.serve(async (req) => {
             }
           }
         }
+      }
+
+      if (!decisorNome && existingData?.nome_decisor) {
+        decisorNome = String(existingData.nome_decisor);
+        updates.nome_decisor = decisorNome;
+        decisorFonte = "base_existente";
       }
 
       // Tenta descobrir se ainda vazio (IG bio -> Google reviews -> IA)
@@ -1235,6 +1255,15 @@ Deno.serve(async (req) => {
     // ═══════════════════ ETAPA 3: MATURIDADE ═══════════════════
     // Instagram (Apify) + Google Maps profile — sinais de atividade digital
     if (stage === "maturity" || stage === "all") {
+      const socialUpdates = await enrichGeneralFields(
+        nome_empresa, cidade,
+        { site, instagram, linkedin, telefone, endereco },
+        FIRECRAWL_API_KEY, LOVABLE_API_KEY,
+      );
+      for (const [k, v] of Object.entries(socialUpdates)) {
+        if (!updates[k]) updates[k] = v;
+      }
+
       const finalIg = (updates.instagram as string) || instagram || null;
       const finalCid = (updates.cidade as string) || cidade || null;
       const GOOGLE_PLACES_KEY = await loadGooglePlacesKey();
@@ -1252,6 +1281,9 @@ Deno.serve(async (req) => {
       if (gmapsData.google_review_count != null) updates.google_review_count = gmapsData.google_review_count;
       if (gmapsData.google_owner_replied_recently != null) updates.google_owner_replied_recently = gmapsData.google_owner_replied_recently;
       if (gmapsData.google_profile_complete != null) updates.google_profile_complete = gmapsData.google_profile_complete;
+      if (!telefone && !updates.telefone && gmapsData.telefone) updates.telefone = gmapsData.telefone;
+      if (!site && !updates.site && gmapsData.site) updates.site = gmapsData.site;
+      if (!endereco && !updates.endereco && gmapsData.endereco) updates.endereco = gmapsData.endereco;
 
       updates.instagram_scrape_status = finalIg ? igData.status : "not_found";
       updates.google_scrape_status = gmapsData.status;
@@ -1276,6 +1308,7 @@ Deno.serve(async (req) => {
 
     // ═══════════════════ ETAPA 4: SCORE COMERCIAL ═══════════════════
     if (stage === "score" || stage === "all") {
+      const existingData = await findExistingLeadData(nome_empresa, telefone || null, site || null);
       const finalSite = (updates.site as string) || site || null;
       const finalTel = (updates.telefone as string) || telefone || null;
       const finalEnd = (updates.endereco as string) || endereco || null;
@@ -1290,13 +1323,13 @@ Deno.serve(async (req) => {
       const scoreInput = {
         phone_type: phoneType,
         nome_decisor: finalDec,
-        instagram_last_post_days: igData?.instagram_last_post_days ?? updates.instagram_last_post_days ?? prev_instagram_last_post_days ?? null,
+        instagram_last_post_days: igData?.instagram_last_post_days ?? updates.instagram_last_post_days ?? prev_instagram_last_post_days ?? existingData?.instagram_last_post_days ?? null,
         site: finalSite,
-        google_profile_complete: gmapsData?.google_profile_complete ?? updates.google_profile_complete ?? prev_google_profile_complete ?? null,
-        google_review_count: gmapsData?.google_review_count ?? updates.google_review_count ?? prev_google_review_count ?? null,
-        google_owner_replied_recently: gmapsData?.google_owner_replied_recently ?? updates.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? null,
-        google_rating: gmapsData?.google_rating ?? updates.google_rating ?? prev_google_rating ?? null,
-        instagram_profile_is_person: igData?.instagram_profile_is_person ?? updates.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? null,
+        google_profile_complete: gmapsData?.google_profile_complete ?? updates.google_profile_complete ?? prev_google_profile_complete ?? existingData?.google_profile_complete ?? null,
+        google_review_count: gmapsData?.google_review_count ?? updates.google_review_count ?? prev_google_review_count ?? existingData?.google_review_count ?? null,
+        google_owner_replied_recently: gmapsData?.google_owner_replied_recently ?? updates.google_owner_replied_recently ?? prev_google_owner_replied_recently ?? existingData?.google_owner_replied_recently ?? null,
+        google_rating: gmapsData?.google_rating ?? updates.google_rating ?? prev_google_rating ?? existingData?.google_rating ?? null,
+        instagram_profile_is_person: igData?.instagram_profile_is_person ?? updates.instagram_profile_is_person ?? prev_instagram_profile_is_person ?? existingData?.instagram_profile_is_person ?? null,
         cnpj: (updates.cnpj as string) || cnpj || null,
         endereco: finalEnd,
         nome_empresa,

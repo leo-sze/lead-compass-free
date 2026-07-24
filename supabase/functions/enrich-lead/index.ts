@@ -273,7 +273,7 @@ async function findExistingLeadData(nome: string, telefone: string | null, site:
     const cleanName = nome.replace(/\s+[-|–—].*$/, "").trim();
 
     const filters: string[] = [];
-    if (cleanName.length >= 4) filters.push(`nome_empresa.ilike.%${cleanName.replace(/[%_,]/g, "")} %`);
+    if (cleanName.length >= 4) filters.push(`nome_empresa.ilike.%${cleanName.replace(/[%_,]/g, "")}%`);
     if (domain) filters.push(`site.ilike.%${domain.replace(/[%_,]/g, "")}%`);
 
     let query = sb

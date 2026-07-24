@@ -3,10 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 async function loadGooglePlacesKey(): Promise<string | null> {
   try {
-    const url = Deno.env.get("SUPABASE_URL");
-    const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!url || !svc) return null;
-    const sb = createClient(url, svc);
+    const sb = createServiceClient();
+    if (!sb) return null;
     const { data } = await sb.from("settings").select("value").eq("key", "google_places_api_key").maybeSingle();
     const k = data?.value?.trim();
     return k && k.length > 10 ? k : null;
@@ -14,6 +12,13 @@ async function loadGooglePlacesKey(): Promise<string | null> {
     console.error("[settings] erro lendo google_places_api_key:", e);
     return null;
   }
+}
+
+function createServiceClient() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !svc) return null;
+  return createClient(url, svc);
 }
 
 const corsHeaders = {

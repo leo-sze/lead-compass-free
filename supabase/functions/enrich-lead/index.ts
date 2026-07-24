@@ -275,6 +275,7 @@ async function findExistingLeadData(nome: string, telefone: string | null, site:
     const filters: string[] = [];
     if (cleanName.length >= 4) filters.push(`nome_empresa.ilike.%${cleanName.replace(/[%_,]/g, "")}%`);
     if (domain) filters.push(`site.ilike.%${domain.replace(/[%_,]/g, "")}%`);
+    if (phoneDigits) filters.push(`telefone.ilike.%${phoneDigits.slice(-4)}%`);
 
     let query = sb
       .from("leads")

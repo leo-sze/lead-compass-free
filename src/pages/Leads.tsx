@@ -482,7 +482,21 @@ const Leads = () => {
     });
   };
 
+  const setExportedManually = async (exported: boolean) => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    const value = exported ? new Date().toISOString() : null;
+    const { error } = await supabase.from("leads").update({ kommo_imported_at: value } as any).in("id", ids);
+    if (error) {
+      toast({ title: "Erro ao atualizar", description: error.message, variant: "destructive" });
+      return;
+    }
+    setLeads((prev) => prev.map((l) => (ids.includes(l.id) ? ({ ...l, kommo_imported_at: value } as any) : l)));
+    toast({ title: exported ? `${ids.length} marcados como exportado` : `${ids.length} desmarcados` });
+  };
+
   const removeExportedLeads = async () => {
+
     const exportedIds = Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at);
     if (exportedIds.length === 0) {
       toast({ title: "Nenhum lead enviado selecionado", variant: "destructive" });

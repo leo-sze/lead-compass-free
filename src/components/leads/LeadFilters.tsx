@@ -176,12 +176,13 @@ const LeadFilters = ({
         </label>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={kommoImported} onCheckedChange={(v) => { onKommoImportedChange(!!v); if (v) onKommoNotImportedChange(false); }} />
-          Importado para Kommo
+          Exportado
         </label>
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={kommoNotImported} onCheckedChange={(v) => { onKommoNotImportedChange(!!v); if (v) onKommoImportedChange(false); }} />
-          Não importado Kommo
+          Não exportado
         </label>
+
         <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer">
           <Checkbox checked={hasMessage} onCheckedChange={(v) => { onHasMessageChange(!!v); if (v) onNoMessageChange(false); }} />
           Com mensagem

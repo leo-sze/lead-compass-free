@@ -1047,6 +1047,13 @@ const Leads = () => {
                   <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at).length})
                 </Button>
               )}
+              <Button variant="outline" size="sm" onClick={() => setExportedManually(true)} className="border-green-500/50 text-green-400 hover:bg-green-500/10">
+                <CheckCircle className="h-4 w-4 mr-1" /> Marcar exportado ({selected.size})
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setExportedManually(false)}>
+                <X className="h-4 w-4 mr-1" /> Desmarcar exportado
+              </Button>
+
               <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" size="sm" className="border-accent/50 text-accent hover:bg-accent/10">

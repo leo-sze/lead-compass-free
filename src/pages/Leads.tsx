@@ -16,6 +16,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { normalizePhone } from "@/lib/utils";
+import { Phone as PhoneIcon } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import LeadFilters from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
@@ -493,6 +494,48 @@ const Leads = () => {
     }
     setLeads((prev) => prev.map((l) => (ids.includes(l.id) ? ({ ...l, kommo_imported_at: value } as any) : l)));
     toast({ title: exported ? `${ids.length} marcados como exportado` : `${ids.length} desmarcados` });
+  };
+
+  const [findingPhones, setFindingPhones] = useState(false);
+  const [phoneProgress, setPhoneProgress] = useState("");
+  const findPhones = async () => {
+    const targets = leads.filter((l) => selected.has(l.id) && !l.telefone);
+    if (targets.length === 0) {
+      toast({ title: "Todos os selecionados já têm telefone" });
+      return;
+    }
+    setFindingPhones(true);
+    let found = 0;
+    const BATCH = 5;
+    try {
+      for (let i = 0; i < targets.length; i += BATCH) {
+        const batch = targets.slice(i, i + BATCH);
+        setPhoneProgress(`${Math.min(i + BATCH, targets.length)}/${targets.length}`);
+        const { data, error } = await supabase.functions.invoke("find-phone", {
+          body: {
+            contacts: batch.map((l, idx) => ({
+              index: idx,
+              companyName: l.nome_empresa,
+              website: l.site || undefined,
+              city: l.cidade || "",
+            })),
+          },
+        });
+        if (error) { console.error("find-phone failed:", error); continue; }
+        for (const r of (data?.results || []) as { index: number; phone: string | null }[]) {
+          const lead = batch[r.index];
+          if (!lead || !r.phone) continue;
+          const { error: upErr } = await supabase.from("leads").update({ telefone: r.phone }).eq("id", lead.id);
+          if (upErr) continue;
+          found++;
+          setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, telefone: r.phone } : l)));
+        }
+      }
+      toast({ title: `Telefones encontrados: ${found} de ${targets.length}` });
+    } finally {
+      setFindingPhones(false);
+      setPhoneProgress("");
+    }
   };
 
   const removeExportedLeads = async () => {

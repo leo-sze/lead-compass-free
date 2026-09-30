@@ -1084,6 +1084,7 @@ const Leads = () => {
         </TabsContent>
 
         <TabsContent value="leads">
+      <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">Leads</h1>
@@ -1091,250 +1092,122 @@ const Leads = () => {
             {leads.length} leads no total · {filtered.length} exibidos
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 items-center">
-          {selected.size > 0 && (
-            <>
-              <BulkWhatsApp leads={selectedLeads} />
-              <CopyForSDR leads={selectedLeads} />
-              <Button variant="destructive" size="sm" onClick={deleteSelected}>
-                <Trash2 className="h-4 w-4 mr-1" /> Excluir ({selected.size})
+        <div className="flex gap-2 items-center">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button disabled={pipelineRunning}>
+                {pipelineRunning ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                Enriquecer <ChevronDown className="h-4 w-4 ml-1" />
               </Button>
-              {Array.from(selected).some(id => leads.find(l => l.id === id)?.kommo_imported_at) && (
-                <Button variant="outline" size="sm" onClick={removeExportedLeads} className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10">
-                  <CheckCircle className="h-4 w-4 mr-1" /> Remover enviados ({Array.from(selected).filter(id => leads.find(l => l.id === id)?.kommo_imported_at).length})
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={findPhones} disabled={findingPhones}>
-                {findingPhones ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <PhoneIcon className="h-4 w-4 mr-1" />}
-                {findingPhones ? `Buscando telefones ${phoneProgress}` : `Encontrar telefones (${selectedLeads.filter(l => !l.telefone).length})`}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setExportedManually(true)} className="border-green-500/50 text-green-400 hover:bg-green-500/10">
-                <CheckCircle className="h-4 w-4 mr-1" /> Marcar exportado ({selected.size})
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setExportedManually(false)}>
-                <X className="h-4 w-4 mr-1" /> Desmarcar exportado
-              </Button>
-
-              <Popover open={showTagPopover} onOpenChange={setShowTagPopover}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="border-accent/50 text-accent hover:bg-accent/10">
-                    <Tag className="h-4 w-4 mr-1" /> Adicionar tag ({selected.size})
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-3" align="start">
-                  <p className="text-xs text-muted-foreground mb-2">Adicionar tag aos {selected.size} leads selecionados</p>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Nome da tag..."
-                      value={bulkTagInput}
-                      onChange={(e) => setBulkTagInput(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addTagToSelected(bulkTagInput)}
-                      className="h-8 text-sm bg-secondary/50"
-                    />
-                    <Button size="sm" className="h-8" onClick={() => addTagToSelected(bulkTagInput)} disabled={!bulkTagInput.trim()}>
-                      Aplicar
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </>
-          )}
-          <div className="flex items-center gap-1 border border-accent/30 rounded-md px-2 py-1 bg-accent/5">
-            <span className="text-[10px] uppercase text-muted-foreground mr-1">Enriquecer:</span>
-            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("business")} disabled={enriching}
-              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="CNPJ, endereço, telefone e nome do decisor">
-              <Building2 className="h-3.5 w-3.5 mr-1" /> Negócio
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("decisor")} disabled={enriching}
-              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="LinkedIn e telefone do decisor">
-              <User className="h-3.5 w-3.5 mr-1" /> Decisor
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("maturity")} disabled={enriching}
-              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="Instagram, site e Google Maps">
-              <Instagram className="h-3.5 w-3.5 mr-1" /> Maturidade
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => runEnrichStage("score")} disabled={enriching}
-              className="text-accent hover:bg-accent/10 h-7 px-2 text-xs" title="Recalcular score comercial">
-              <Sparkles className="h-3.5 w-3.5 mr-1" /> Score IA
-            </Button>
-            {enriching && (
-              <span className="text-[11px] text-muted-foreground ml-1 flex items-center">
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" /> {enrichProgress}
-              </span>
-            )}
-          </div>
-
-          <Button
-            size="sm"
-            onClick={bulkScoreLeads}
-            disabled={bulkScoring || enriching}
-            className="bg-accent/20 text-accent border border-accent/30 hover:bg-accent/30"
-          >
-            {bulkScoring ? (
-              <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Analisando {bulkScoreProgress.current}/{bulkScoreProgress.total}</>
-            ) : (
-              <><Sparkles className="h-4 w-4 mr-1" />Executar Análise IA {selected.size > 0 ? `(${selected.size})` : ""}</>
-            )}
-          </Button>
-          <div className="flex items-center gap-2 border border-accent/30 rounded-md px-2 py-1 bg-accent/5">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={bulkGenerateMessages}
-              disabled={bulkGenMsg || bulkScoring || enriching}
-              className="text-accent hover:bg-accent/10 h-7 px-2"
-            >
-              {bulkGenMsg ? (
-                <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Gerando {bulkGenProgress.current}/{bulkGenProgress.total}</>
-              ) : (
-                <><MessageSquare className="h-4 w-4 mr-1" />Gerar mensagens {selected.size > 0 ? `(${selected.size})` : `(${filtered.length})`}</>
-              )}
-            </Button>
-            <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
-              <Checkbox checked={regenerateMessages} onCheckedChange={(v) => setRegenerateMessages(!!v)} className="h-3 w-3" />
-              Regenerar
-            </label>
-          </div>
-          <Button variant="outline" size="sm" onClick={exportCSV}>
-            <Download className="h-4 w-4 mr-1" /> Exportar CSV
-          </Button>
-          <input
-            type="file"
-            accept=".csv"
-            ref={kommoFileInputRef}
-            onChange={handleMarkImportedFromKommo}
-            className="hidden"
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => kommoFileInputRef.current?.click()}
-            disabled={markingKommo}
-            className="border-blue-500/50 text-blue-400 hover:bg-blue-500/10"
-          >
-            {markingKommo ? (
-              <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Marcando...</>
-            ) : (
-              <><Building2 className="h-4 w-4 mr-1" /> Marcar importados Kommo</>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={deleteDuplicates}
-            className="border-orange-500/50 text-orange-400 hover:bg-orange-500/10"
-          >
-            <Copy className="h-4 w-4 mr-1" /> Excluir duplicatas
-          </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem disabled={selected.size === 0} onClick={() => startPipeline(selectedLeads)}>
+                Leads selecionados ({selected.size})
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => startPipeline(filtered.filter((l: any) => !["empresa", "presenca", "ia"].every((k) => ["concluido", "pulado"].includes(l[`stage_${k}_status`]))))}>
+                Todos os pendentes exibidos
+              </DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Reprocessar etapa…</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {STAGES.map((s, i) => (
+                    <DropdownMenuItem key={s.key} onClick={() => startPipeline(selected.size ? selectedLeads : filtered, s.key)}>
+                      {i + 1}. {s.label} {selected.size ? `(${selected.size})` : `(${filtered.length})`}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem checked={autoMessage} onCheckedChange={(v) => toggleAutoMessage(!!v)}>
+                Gerar mensagem ao final
+              </DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <input type="file" accept=".csv" ref={kommoFileInputRef} onChange={handleMarkImportedFromKommo} className="hidden" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="Mais ações"><MoreHorizontal className="h-4 w-4" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportCSV}><Download className="h-4 w-4 mr-2" /> Exportar CSV</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => kommoFileInputRef.current?.click()} disabled={markingKommo}>
+                <Building2 className="h-4 w-4 mr-2" /> Marcar importados no Kommo
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => setConfirm({ kind: "dupes" })}>
+                <Copy className="h-4 w-4 mr-2" /> Excluir duplicatas
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <LeadFilters
-        filter={filter}
-        onFilterChange={setFilter}
-        termos={termos}
-        selectedTermo={selectedTermo}
-        onTermoChange={setSelectedTermo}
-        cidades={cidades}
-        selectedCidade={selectedCidade}
-        onCidadeChange={setSelectedCidade}
-        fontes={fontes}
-        selectedFonte={selectedFonte}
-        onFonteChange={setSelectedFonte}
-        hasPhone={hasPhone}
-        onHasPhoneChange={setHasPhone}
-        noPhone={noPhone}
-        onNoPhoneChange={setNoPhone}
-        hasSite={hasSite}
-        onHasSiteChange={setHasSite}
-        hasInstagram={hasInstagram}
-        onHasInstagramChange={setHasInstagram}
-        hasDecisor={hasDecisor}
-        onHasDecisorChange={setHasDecisor}
-        noDecisor={noDecisor}
-        onNoDecisorChange={setNoDecisor}
-        kommoImported={kommoImported}
-        onKommoImportedChange={setKommoImported}
-        kommoNotImported={kommoNotImported}
-        onKommoNotImportedChange={setKommoNotImported}
-        hasMessage={hasMessage}
-        onHasMessageChange={setHasMessage}
-        noMessage={noMessage}
-        onNoMessageChange={setNoMessage}
-        dateFrom={dateFrom}
-        onDateFromChange={setDateFrom}
-        dateTo={dateTo}
-        onDateToChange={setDateTo}
-      />
-      <div className="flex gap-2 flex-wrap">
-        {([
-          { value: "quente" as QualityFilter, label: "🔥 Quente", cls: "bg-green-500/10 text-green-400 border-green-500/30" },
-          { value: "morno" as QualityFilter, label: "🟡 Morno", cls: "bg-yellow-500/10 text-yellow-400 border-yellow-500/30" },
-          { value: "frio" as QualityFilter, label: "🔵 Frio", cls: "bg-red-500/10 text-red-400 border-red-500/30" },
-          { value: "all" as QualityFilter, label: "Todos", cls: "bg-secondary text-foreground border-border" },
-          { value: "desqualificado" as QualityFilter, label: "Desqualificados", cls: "bg-muted/50 text-muted-foreground border-border" },
-          { value: "sem_avaliacao" as QualityFilter, label: "⬜ Sem avaliação", cls: "bg-secondary/50 text-muted-foreground border-border" },
-        ]).map((tab) => {
-          const count = leads.filter((l) => {
-            if (tab.value === "all") return l.lead_quality !== "desqualificado";
-            if (tab.value === "sem_avaliacao") return !l.lead_quality && l.score == null;
-            return l.lead_quality === tab.value;
-          }).length;
-          return (
-            <Button
-              key={tab.value}
-              variant="outline"
-              size="sm"
-              onClick={() => setQualityFilter(tab.value)}
-              className={`${qualityFilter === tab.value ? tab.cls + " ring-1 ring-accent" : "bg-secondary/30 text-muted-foreground border-border/50"}`}
-            >
-              {tab.label} ({count})
-            </Button>
-          );
-        })}
-      </div>
+      <LeadsFilterBar state={fs} set={setFs} cidades={cidades} termos={termos} fontes={fontes} />
+      <TemperatureTabs value={fs.temp} counts={tempCounts} onChange={(t) => setFs({ temp: t })} />
+      <ActiveChips state={fs} set={setFs} clear={clearFs} />
 
-      {bulkScoring && (
+      {pipelineRunning && (
         <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">Analisando qualidade via IA... {bulkScoreProgress.current}/{bulkScoreProgress.total}</p>
-          <Progress value={(bulkScoreProgress.current / bulkScoreProgress.total) * 100} className="h-2" />
+          <p className="text-xs text-muted-foreground">{pipeline.done}/{pipeline.total} leads · Etapa {pipeline.stage} de 4</p>
+          <Progress value={pipeline.total ? (pipeline.done / pipeline.total) * 100 : 0} className="h-2" />
         </div>
       )}
+      {(bulkGenMsg || findingPhones || markingKommo) && (
+        <p className="text-xs text-muted-foreground flex items-center"><Loader2 className="h-3 w-3 mr-1 animate-spin" />
+          {bulkGenMsg ? `Gerando mensagens ${bulkGenProgress.current}/${bulkGenProgress.total}` : findingPhones ? `Buscando telefones ${phoneProgress}` : "Marcando importados..."}
+        </p>
+      )}
+
+      <div className="flex justify-end">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm"><Columns3 className="h-4 w-4 mr-1" /> Colunas</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {OPTIONAL_COLS.map((c) => (
+              <DropdownMenuCheckboxItem key={c.key} checked={cols.includes(c.key)} onSelect={(e) => e.preventDefault()}
+                onCheckedChange={(v) => setCols((p) => v ? [...p, c.key] : p.filter((x) => x !== c.key))}>
+                {c.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <Card className="border-border/50 bg-card/80">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow className="border-border/50">
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allSelectedOnPage}
-                    onCheckedChange={toggleAll}
-                  />
-                </TableHead>
+                <TableHead className="w-10"><Checkbox checked={allSelectedOnPage} onCheckedChange={toggleAll} /></TableHead>
                 <TableHead>Empresa</TableHead>
-                <TableHead>Comercial</TableHead>
-                <TableHead>Sinais</TableHead>
-                <TableHead>Score IA</TableHead>
-                <TableHead>CNPJ</TableHead>
-                <TableHead>Decisor</TableHead>
                 <TableHead>Telefone</TableHead>
-                <TableHead>Site</TableHead>
-                <TableHead>Endereço</TableHead>
-                <TableHead>Redes</TableHead>
-                <TableHead>Cidade</TableHead>
-                <TableHead>Fonte</TableHead>
-                <TableHead>Data</TableHead>
+                <TableHead>Decisor</TableHead>
+                <TableHead>Temperatura</TableHead>
+                {show("comercial") && <TableHead>Comercial</TableHead>}
+                {show("sinais") && <TableHead>Sinais</TableHead>}
+                {show("cnpj") && <TableHead>CNPJ</TableHead>}
+                {show("site") && <TableHead>Site</TableHead>}
+                {show("endereco") && <TableHead>Endereço</TableHead>}
+                {show("redes") && <TableHead>Redes</TableHead>}
+                {show("fonte") && <TableHead>Fonte</TableHead>}
+                {show("data") && <TableHead>Data</TableHead>}
+                {show("mensagem") && <TableHead>Mensagem</TableHead>}
+                <TableHead>Progresso</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Mensagem</TableHead>
-                <TableHead className="w-24">Ações</TableHead>
+                <TableHead className="w-20">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={17} className="text-center text-muted-foreground py-12">
-                    Nenhum lead encontrado.
+                  <TableCell colSpan={20} className="text-center text-muted-foreground py-12">
+                    <p className="mb-3">Nenhum lead encontrado.</p>
+                    {activeChips(fs).length > 0 || fs.temp !== "all" ? (
+                      <Button variant="outline" size="sm" onClick={clearFs}>Limpar filtros</Button>
+                    ) : leads.length === 0 ? (
+                      <Button size="sm" onClick={() => navigate("/find-contacts")}>Importar leads</Button>
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -1343,106 +1216,63 @@ const Leads = () => {
                   const isExported = !!lead.kommo_imported_at;
                   const isScoring = reAnalyzing.has(lead.id);
                   return (
-                    <TableRow key={lead.id} className={`border-border/30 hover:bg-secondary/30 ${isExported ? "opacity-50 bg-green-500/5" : ""}`}>
-                      <TableCell>
-                        <Checkbox
-                          checked={selected.has(lead.id)}
-                          onCheckedChange={() => toggleSelect(lead.id)}
-                        />
+                    <TableRow key={lead.id} onClick={() => setDrawerId(lead.id)}
+                      className={`border-border/30 hover:bg-secondary/30 cursor-pointer ${isExported ? "opacity-60" : ""}`}>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox checked={selected.has(lead.id)} onCheckedChange={() => toggleSelect(lead.id)} />
                       </TableCell>
-                      <TableCell className="font-medium">{lead.nome_empresa}</TableCell>
-                      <TableCell><CommercialCell lead={lead} /></TableCell>
-                      <TableCell><SignalIcons lead={lead} /></TableCell>
-                      <TableCell>
-                        <QualityBadgeWithHover lead={lead} isScoring={isScoring} />
+                      <TableCell className="max-w-[240px]">
+                        <div className="font-medium truncate">{lead.nome_empresa}</div>
+                        <div className="text-xs text-muted-foreground truncate">{lead.cidade || "—"}</div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>
-                      <TableCell className="text-sm">{lead.nome_decisor || "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{lead.telefone || "—"}</TableCell>
-                      <TableCell>
-                        {lead.site ? (
-                          <a href={lead.site} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline flex items-center gap-1">
-                            <ExternalLink className="h-3 w-3" />
-                            <span className="truncate max-w-[120px]">{lead.site.replace(/https?:\/\//, "")}</span>
-                          </a>
-                        ) : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm max-w-[180px] truncate">{lead.endereco || "—"}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {lead.instagram && (
-                            <a href={lead.instagram} target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300">
-                              <Instagram className="h-4 w-4" />
+                      <TableCell className="font-mono text-sm whitespace-nowrap">{lead.telefone || "—"}</TableCell>
+                      <TableCell className="text-sm max-w-[160px] truncate">{lead.nome_decisor || "—"}</TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}><QualityBadgeWithHover lead={lead} isScoring={isScoring} /></TableCell>
+                      {show("comercial") && <TableCell onClick={(e) => e.stopPropagation()}><CommercialCell lead={lead} /></TableCell>}
+                      {show("sinais") && <TableCell><SignalIcons lead={lead} /></TableCell>}
+                      {show("cnpj") && <TableCell className="font-mono text-xs">{(lead as any).cnpj || "—"}</TableCell>}
+                      {show("site") && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          {lead.site ? (
+                            <a href={lead.site} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                              <ExternalLink className="h-3 w-3" /><span className="truncate max-w-[120px]">{lead.site.replace(/https?:\/\//, "")}</span>
                             </a>
-                          )}
-                          {lead.linkedin && (
-                            <a href={lead.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300">
-                              <ExternalLink className="h-4 w-4" />
-                            </a>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{lead.cidade || "—"}</TableCell>
+                          ) : "—"}
+                        </TableCell>
+                      )}
+                      {show("endereco") && <TableCell className="text-sm max-w-[180px] truncate">{lead.endereco || "—"}</TableCell>}
+                      {show("redes") && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <div className="flex gap-1">
+                            {lead.instagram && <a href={lead.instagram} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground"><Instagram className="h-4 w-4" /></a>}
+                            {lead.linkedin && <a href={lead.linkedin} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground"><ExternalLink className="h-4 w-4" /></a>}
+                          </div>
+                        </TableCell>
+                      )}
+                      {show("fonte") && <TableCell className="text-xs">{lead.fonte || "—"}</TableCell>}
+                      {show("data") && <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{new Date(lead.created_at).toLocaleDateString("pt-BR")}</TableCell>}
+                      {show("mensagem") && (
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <MessageCell lead={lead} onUpdate={(patch) => setLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, ...patch } as any : l))} />
+                        </TableCell>
+                      )}
+                      <TableCell><ProgressIcons lead={lead} /></TableCell>
                       <TableCell>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          lead.fonte === "linkedin" ? "bg-blue-500/10 text-blue-400" :
-                          lead.fonte === "b2bleads" ? "bg-purple-500/10 text-purple-400" :
-                          "bg-primary/10 text-primary"
-                        }`}>
-                          {lead.fonte === "linkedin" ? "LinkedIn" : lead.fonte === "google" ? "Google" : lead.fonte === "b2bleads" ? "B2BLeads" : lead.fonte || "—"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                        {new Date(lead.created_at).toLocaleDateString("pt-BR")}
-                      </TableCell>
-                      <TableCell>
-                        {ks?.status === "success" && (
-                          <Badge variant="outline" className="bg-green-500/10 text-green-400 border-green-500/30 text-xs">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Kommo
+                        {isExported ? (
+                          <Badge variant="outline" className="text-xs"><CheckCircle className="h-3 w-3 mr-1" />Exportado</Badge>
+                        ) : ks?.status === "error" ? (
+                          <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs" title={ks.error || "Erro ao exportar"}>
+                            <XCircle className="h-3 w-3 mr-1" />Erro
                           </Badge>
-                        )}
-                        {ks?.status === "error" && (
-                          <Badge
-                            variant="outline"
-                            className="bg-destructive/10 text-destructive border-destructive/30 text-xs cursor-help"
-                            title={ks.error || "Erro ao exportar"}
-                          >
-                            <XCircle className="h-3 w-3 mr-1" />
-                            Erro
-                          </Badge>
-                        )}
+                        ) : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
-                      <TableCell>
-                        <MessageCell
-                          lead={lead}
-                          onUpdate={(patch) => setLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, ...patch } as any : l))}
-                        />
-                      </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openWhatsApp(lead)}
-                            className="text-green-400 hover:text-green-300 hover:bg-green-400/10 h-8 w-8"
-                            title="Enviar WhatsApp"
-                          >
+                          <Button variant="ghost" size="icon" onClick={() => openWhatsApp(lead)} className="h-8 w-8" title="Enviar WhatsApp">
                             <MessageCircle className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => reAnalyzeLead(lead)}
-                            disabled={isScoring}
-                            className="text-accent hover:text-accent/80 hover:bg-accent/10 h-8 w-8"
-                            title="Re-analisar via IA"
-                          >
-                            {isScoring ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4" />
-                            )}
+                          <Button variant="ghost" size="icon" onClick={() => reAnalyzeLead(lead)} disabled={isScoring} className="h-8 w-8" title="Re-analisar via IA">
+                            {isScoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                           </Button>
                         </div>
                       </TableCell>
@@ -1456,99 +1286,87 @@ const Leads = () => {
       </Card>
 
       {/* Pagination controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-20">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>Leads por página:</span>
           {[15, 30, 50, 100].map((n) => (
-            <Button
-              key={n}
-              variant={pageSize === n ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-2"
-              onClick={() => setPageSize(n)}
-            >
-              {n}
-            </Button>
+            <Button key={n} variant={pageSize === n ? "default" : "outline"} size="sm" className="h-7 px-2" onClick={() => setPageSize(n)}>{n}</Button>
           ))}
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="text-muted-foreground">
-            {filtered.length === 0
-              ? "0 resultados"
-              : `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} de ${filtered.length}`}
+            {filtered.length === 0 ? "0 resultados" : `${pageStart + 1}–${Math.min(pageStart + pageSize, filtered.length)} de ${filtered.length}`}
           </span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              disabled={safePage <= 1}
-              onClick={() => setCurrentPage(1)}
-            >
-              «
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              disabled={safePage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            >
-              ‹
-            </Button>
-            <span className="px-2 text-xs tabular-nums">
-              Página {safePage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              disabled={safePage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            >
-              ›
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 px-2"
-              disabled={safePage >= totalPages}
-              onClick={() => setCurrentPage(totalPages)}
-            >
-              »
-            </Button>
+            <Button variant="outline" size="sm" className="h-7 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage(1)}>«</Button>
+            <Button variant="outline" size="sm" className="h-7 px-2" disabled={safePage <= 1} onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}>‹</Button>
+            <span className="px-2 text-xs tabular-nums">Página {safePage} / {totalPages}</span>
+            <Button variant="outline" size="sm" className="h-7 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}>›</Button>
+            <Button variant="outline" size="sm" className="h-7 px-2" disabled={safePage >= totalPages} onClick={() => setCurrentPage(totalPages)}>»</Button>
           </div>
         </div>
       </div>
+      </div>
 
-
-      {/* Floating toolbar */}
+      {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl shadow-2xl px-6 py-3 flex items-center gap-4 z-50">
-          <span className="text-sm font-medium">{selected.size} leads selecionados</span>
-          <Button
-            size="sm"
-            onClick={handleExportKommo}
-            disabled={exporting}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {exporting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                Enviando {exportProgress.current}/{exportProgress.total}...
-              </>
-            ) : (
-              <>
-                <Building2 className="h-4 w-4 mr-1" />
-                Exportar para Kommo
-              </>
-            )}
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border rounded-xl shadow-2xl px-4 py-2.5 flex flex-wrap items-center gap-2 z-50 max-w-[95vw]">
+          <span className="text-sm font-medium mr-2">{selected.size} selecionados</span>
+          <Button size="sm" onClick={() => startPipeline(selectedLeads)} disabled={pipelineRunning}><Sparkles className="h-4 w-4 mr-1" /> Enriquecer</Button>
+          <Button size="sm" variant="outline" onClick={bulkGenerateMessages} disabled={bulkGenMsg}><MessageSquare className="h-4 w-4 mr-1" /> Gerar mensagens</Button>
+          <Button size="sm" variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-1" /> CSV</Button>
+          <Button size="sm" variant="outline" onClick={handleExportKommo} disabled={exporting}>
+            {exporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Building2 className="h-4 w-4 mr-1" />} Kommo
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
-            <X className="h-4 w-4 mr-1" /> Cancelar
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button size="sm" variant="outline"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setExportedManually(true)}>Marcar como exportado</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setExportedManually(false)}>Desmarcar exportado</DropdownMenuItem>
+              <DropdownMenuItem onClick={findPhones} disabled={findingPhones}>Encontrar telefones ({selectedLeads.filter(l => !l.telefone).length})</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowTagPopover(true)}>Adicionar tag</DropdownMenuItem>
+              <DropdownMenuItem onClick={removeExportedLeads}>Remover já enviados</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <BulkWhatsApp leads={selectedLeads} />
+          <CopyForSDR leads={selectedLeads} />
+          <Button size="sm" variant="destructive" onClick={() => setConfirm({ kind: "bulk" })}><Trash2 className="h-4 w-4 mr-1" /> Excluir</Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}><X className="h-4 w-4" /></Button>
         </div>
       )}
+
+      <Dialog open={showTagPopover} onOpenChange={setShowTagPopover}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Adicionar tag a {selected.size} leads</DialogTitle></DialogHeader>
+          <Input placeholder="Nome da tag..." value={bulkTagInput} onChange={(e) => setBulkTagInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addTagToSelected(bulkTagInput)} />
+          <DialogFooter><Button onClick={() => addTagToSelected(bulkTagInput)} disabled={!bulkTagInput.trim()}>Aplicar</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirm?.kind === "dupes" ? "Excluir duplicatas?" : `Excluir ${selected.size} leads?`}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirm?.kind === "dupes"
+                ? `${duplicateIds.length} registros duplicados (mesmo telefone ou mesmo nome) serão removidos permanentemente.`
+                : "Os leads serão removidos permanentemente e não voltarão em novas buscas."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={confirm?.kind === "dupes" && duplicateIds.length === 0}
+              onClick={() => { confirm?.kind === "dupes" ? deleteDuplicates() : deleteSelected(); setConfirm(null); }}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LeadDrawer lead={drawerLead} open={!!drawerLead} onOpenChange={(o) => !o && setDrawerId(null)}
+        onUpdate={(patch) => drawerLead && setLeads((prev) => prev.map((l) => l.id === drawerLead.id ? { ...l, ...patch } as any : l))} />
 
       {/* Exporting progress bar */}
       {exporting && (

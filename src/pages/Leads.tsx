@@ -18,14 +18,32 @@ import { useToast } from "@/hooks/use-toast";
 import { normalizePhone } from "@/lib/utils";
 import { Phone as PhoneIcon } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
-import LeadFilters from "@/components/leads/LeadFilters";
+import { LeadsFilterBar, TemperatureTabs, ActiveChips } from "@/components/leads/LeadFilters";
 import BulkWhatsApp from "@/components/leads/BulkWhatsApp";
 import CopyForSDR from "@/components/leads/CopyForSDR";
 import B2BLeadsImport from "@/components/leads/B2BLeadsImport";
 import MessageCell from "@/components/leads/MessageCell";
+import { LeadDrawer, ProgressIcons } from "@/components/leads/LeadDetails";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ChevronDown, MoreHorizontal, Columns3 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useLeadFilters, applyLeadFilters, activeChips, type Temp } from "@/hooks/useLeadFilters";
+import { runPipeline, STAGES, type StageKey } from "@/lib/leadPipeline";
+
+const OPTIONAL_COLS = [
+  { key: "cnpj", label: "CNPJ" }, { key: "site", label: "Site" }, { key: "endereco", label: "Endereço" },
+  { key: "redes", label: "Redes" }, { key: "fonte", label: "Fonte" }, { key: "data", label: "Data" },
+  { key: "mensagem", label: "Mensagem" }, { key: "comercial", label: "Comercial" }, { key: "sinais", label: "Sinais" },
+];
 
 type Lead = Tables<"leads"> & {
   termo_pesquisa?: string | null;
@@ -268,23 +286,21 @@ type KommoStatus = "success" | "error" | "duplicate";
 const Leads = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState("");
-  const [selectedTermo, setSelectedTermo] = useState("all");
-  const [selectedCidade, setSelectedCidade] = useState("all");
-  const [selectedFonte, setSelectedFonte] = useState("all");
-  const [hasPhone, setHasPhone] = useState(false);
-  const [noPhone, setNoPhone] = useState(false);
-  const [hasSite, setHasSite] = useState(false);
-  const [hasInstagram, setHasInstagram] = useState(false);
-  const [hasDecisor, setHasDecisor] = useState(false);
-  const [noDecisor, setNoDecisor] = useState(false);
-  const [kommoImported, setKommoImported] = useState(false);
-  const [kommoNotImported, setKommoNotImported] = useState(false);
-  const [hasMessage, setHasMessage] = useState(false);
-  const [noMessage, setNoMessage] = useState(false);
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
-  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
-  const [qualityFilter, setQualityFilter] = useState<QualityFilter>("quente");
+  const { state: fs, set: setFs, clear: clearFs } = useLeadFilters();
+  const navigate = useNavigate();
+  const [drawerId, setDrawerId] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: "dupes" | "bulk" } | null>(null);
+  const [pipelineRunning, setPipelineRunning] = useState(false);
+  const [pipeline, setPipeline] = useState({ done: 0, total: 0, stage: 1 });
+  const [autoMessage, setAutoMessage] = useState(false);
+  const [cols, setCols] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem("leads_cols") || "[]"); } catch { return []; }
+  });
+  useEffect(() => { localStorage.setItem("leads_cols", JSON.stringify(cols)); }, [cols]);
+  useEffect(() => {
+    supabase.from("settings").select("value").eq("key", "pipeline_auto_message").maybeSingle()
+      .then(({ data }) => setAutoMessage(data?.value === "1"));
+  }, []);
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState("");
   const [reAnalyzing, setReAnalyzing] = useState<Set<string>>(new Set());
@@ -365,54 +381,58 @@ const Leads = () => {
     return Array.from(set).sort();
   }, [leads]);
 
+  const baseFiltered = useMemo(() => applyLeadFilters(leads, fs, { skipTemp: true }), [leads, fs]);
+  const tempCounts = useMemo(() => {
+    const c: Record<Temp, number> = { all: 0, quente: 0, morno: 0, frio: 0, desqualificado: 0, sem_avaliacao: 0 };
+    for (const l of baseFiltered) {
+      if (l.lead_quality !== "desqualificado") c.all++;
+      if (!l.lead_quality && l.score == null) c.sem_avaliacao++;
+      else if (l.lead_quality && l.lead_quality in c) (c as any)[l.lead_quality]++;
+    }
+    return c;
+  }, [baseFiltered]);
   const filtered = useMemo(() => {
-    let result = leads;
-    if (qualityFilter === "sem_avaliacao") {
-      result = result.filter((l) => !l.lead_quality && l.score == null);
-    } else if (qualityFilter !== "all") {
-      if (qualityFilter === "desqualificado") {
-        result = result.filter((l) => l.lead_quality === "desqualificado");
-      } else {
-        result = result.filter((l) => l.lead_quality !== "desqualificado");
-        result = result.filter((l) => l.lead_quality === qualityFilter);
-      }
-    } else {
-      result = result.filter((l) => l.lead_quality !== "desqualificado");
+    const r = applyLeadFilters(baseFiltered, { ...fs, incompletos: fs.incompletos, q: "", cidade: "", termo: "", fonte: "", phone: "any", site: "any", ig: "any", decisor: "any", exported: "any", msg: "any", stage: "", period: "" });
+    return [...r].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
+  }, [baseFiltered, fs]);
+
+  const duplicateIds = useMemo(() => {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const l of leads as any[]) {
+      const keys = [l.phone_e164 ? `p:${l.phone_e164}` : null, `n:${l.nome_empresa.trim().toLowerCase()}|${(l.endereco || "").trim().toLowerCase()}`].filter(Boolean) as string[];
+      if (keys.some((k) => seen.has(k))) ids.push(l.id);
+      else keys.forEach((k) => seen.add(k));
     }
-    if (filter) {
-      const f = filter.toLowerCase();
-      result = result.filter(
-        (l) =>
-          l.nome_empresa.toLowerCase().includes(f) ||
-          l.endereco?.toLowerCase().includes(f)
-      );
+    return ids;
+  }, [leads]);
+
+  const drawerLead = useMemo(() => leads.find((l) => l.id === drawerId) || null, [leads, drawerId]);
+  const show = (k: string) => cols.includes(k);
+
+  const startPipeline = async (items: Lead[], reprocess: StageKey | null = null) => {
+    const list = items.filter((l: any) => !l.incompleto_motivo);
+    if (!list.length) { toast({ title: "Nenhum lead para enriquecer", description: "Leads incompletos (sem nome, telefone ou endereço) não entram no pipeline." }); return; }
+    setPipelineRunning(true);
+    setPipeline({ done: 0, total: list.length, stage: 1 });
+    try {
+      await runPipeline(list, {
+        reprocess, autoMessage,
+        onLeadUpdate: (id, patch) => setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l))),
+        onProgress: setPipeline,
+      });
+      toast({ title: "Enriquecimento concluído", description: `${list.length} leads processados.` });
+    } finally {
+      setPipelineRunning(false);
     }
-    if (selectedTermo !== "all") result = result.filter((l) => l.termo_pesquisa === selectedTermo);
-    if (selectedCidade !== "all") result = result.filter((l) => l.cidade === selectedCidade);
-    if (selectedFonte !== "all") result = result.filter((l) => l.fonte === selectedFonte);
-    if (hasPhone) result = result.filter((l) => l.telefone);
-    if (noPhone) result = result.filter((l) => !l.telefone || !String(l.telefone).trim());
-    if (hasSite) result = result.filter((l) => l.site);
-    if (hasInstagram) result = result.filter((l) => l.instagram);
-    if (hasDecisor) result = result.filter((l) => l.nome_decisor);
-    if (noDecisor) result = result.filter((l) => !l.nome_decisor || !String(l.nome_decisor).trim());
-    if (kommoImported) result = result.filter((l) => (l as any).kommo_imported_at);
-    if (kommoNotImported) result = result.filter((l) => !(l as any).kommo_imported_at);
-    if (hasMessage) result = result.filter((l) => !!(l as any).mensagem_personalizada);
-    if (noMessage) result = result.filter((l) => !(l as any).mensagem_personalizada);
-    if (dateFrom) {
-      const from = new Date(dateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter((l) => new Date(l.created_at) >= from);
-    }
-    if (dateTo) {
-      const to = new Date(dateTo);
-      to.setHours(23, 59, 59, 999);
-      result = result.filter((l) => new Date(l.created_at) <= to);
-    }
-    result = [...result].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
-    return result;
-  }, [leads, filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, hasMessage, noMessage, kommoStatuses, qualityFilter, dateFrom, dateTo]);
+  };
+
+  const toggleAutoMessage = async (v: boolean) => {
+    setAutoMessage(v);
+    const { data } = await supabase.from("settings").select("id").eq("key", "pipeline_auto_message").maybeSingle();
+    if (data) await supabase.from("settings").update({ value: v ? "1" : "0" }).eq("id", data.id);
+    else await supabase.from("settings").insert({ key: "pipeline_auto_message", value: v ? "1" : "0" });
+  };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
@@ -422,7 +442,7 @@ const Leads = () => {
     [filtered, pageStart, pageSize]
   );
 
-  useEffect(() => { setCurrentPage(1); }, [filter, selectedTermo, selectedCidade, selectedFonte, hasPhone, noPhone, hasSite, hasInstagram, hasDecisor, noDecisor, kommoImported, kommoNotImported, qualityFilter, dateFrom, dateTo, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [fs, pageSize]);
 
   const selectedLeads = useMemo(
     () => leads.filter((l) => selected.has(l.id)),
@@ -625,16 +645,6 @@ const Leads = () => {
   };
 
   const deleteDuplicates = async () => {
-    const seen = new Map<string, string>();
-    const duplicateIds: string[] = [];
-    for (const lead of leads) {
-      const key = lead.nome_empresa.trim().toLowerCase();
-      if (seen.has(key)) {
-        duplicateIds.push(lead.id);
-      } else {
-        seen.set(key, lead.id);
-      }
-    }
     if (duplicateIds.length === 0) {
       toast({ title: "Nenhuma duplicata encontrada" });
       return;

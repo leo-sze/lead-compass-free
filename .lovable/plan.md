@@ -1,70 +1,34 @@
+# Reorganizar tela de Leads + pipeline único de enriquecimento
 
+Feito em 3 fases, cada uma testável sozinha, sem quebrar o que já funciona hoje.
 
-# Corrigir busca de telefones na função find-phone
+## Fase 1 — Tela de Leads (filtros, toolbar, tabela)
+- Cabeçalho: "Leads · X no total · Y exibidos", botão principal **Enriquecer** e menu "⋯" (Exportar CSV, Marcar importados no Kommo, Excluir duplicatas em vermelho com confirmação e contagem).
+- Barra de filtros em uma linha só: busca (nome, endereço, telefone, CNPJ) com espera de 300ms, botão **Filtros** com contador, seletor de período (Hoje, 7 dias, 30 dias, Este mês, Personalizado).
+- Abas de temperatura com contadores: Todos · Quente · Morno · Frio · Desqualificados · Sem avaliação.
+- Filtros ativos aparecem como chips removíveis + "Limpar tudo".
+- O painel de Filtros tem seções: Origem (Cidade com busca, Termo, Fonte), Dados do lead (Telefone/Site/Instagram/Decisor com Qualquer/Com/Sem), Status (Exportado, Mensagem, Etapa do enriquecimento, Incompletos). Abre como gaveta no celular.
+- Os filtros ficam salvos no endereço da página, então continuam lá depois de recarregar ou quando você compartilha o link.
+- Tabela padrão: Seleção, Empresa (+ cidade), Telefone, Decisor, Temperatura/Score, Progresso (4 ícones), Status, Ações. As outras colunas podem ser ligadas pelo botão **Colunas** (fica salvo).
+- Clicar na linha abre um painel lateral com todos os dados do lead, o resultado de cada etapa e o botão "Regenerar mensagem".
+- Barra fixa quando há leads selecionados: Enriquecer, Gerar mensagens, Exportar CSV, Marcar no Kommo, Excluir (com confirmação).
+- Paginação 15/30/50/100. Tela vazia útil ("Limpar filtros" ou "Importar leads").
 
-## Problema
+## Fase 2 — Pipeline de enriquecimento
+- Etapa 0, na entrada: telefone normalizado (+55), cidade/UF extraídas, duplicados barrados. Leads sem nome, telefone ou endereço vão para "Incompleto" com o motivo e só aparecem pelo filtro.
+- Etapa 1, Empresa: CNPJ, razão social, situação, CNAE, porte, abertura, capital, sócios. O decisor vem do sócio-administrador. Confiança do match (alta/média/baixa): se for baixa, o decisor não é preenchido. Empresa Baixada/Inapta vira Desqualificado. Consultas por CNPJ reaproveitadas.
+- Etapa 2, Presença digital: site responde?, Instagram/Facebook/LinkedIn, nota e avaliações do Google, seguidores, último post, posts em 30/90 dias.
+- Etapa 3, Análise IA: uma única resposta com maturidade (1–5), frequência de postagem, sinais +/−, score 0–100, temperatura e resumo de 2 linhas. A regra de pontuação fica num arquivo fácil de ajustar.
+- Etapa 4, Mensagem: opcional, automática no fim (configurável) ou manual.
+- Regras: cada etapa roda na ordem certa. Se não achar CNPJ, segue para a próxima mesmo assim. Não refaz o que já está concluído, a não ser que você peça "Reprocessar". Até 3 tentativas com espera crescente. Status por etapa: pendente/processando/concluído/erro/pulado, com data e erro.
+- Botão Enriquecer: "Leads selecionados", "Todos os pendentes", "Reprocessar etapa…". Barra de progresso ("42/120 leads · Etapa 2 de 4") que não trava a tela.
 
-A função `find-phone` usa um regex genérico para extrair telefones do HTML dos sites. Esse regex captura qualquer sequência de 10-11 dígitos, incluindo IDs de rastreamento, códigos JS, pixels, etc. Resultado: números falsos como `1110051030`, `4616409202`.
-
-Comparando com a planilha Apollo, os telefones reais estão nos campos "Corporate Phone" (ex: `+55 11 3081-4171`) e o Google Places retorna números formatados corretamente (ex: `(11) 98488-4979`).
-
-## Solução
-
-### 1. Inverter a prioridade: Google Places primeiro, site como fallback
-
-O Google Places retorna telefones verificados e formatados. Deve ser a fonte primária, não o fallback.
-
-### 2. Melhorar o scraping de sites
-
-Em vez de buscar qualquer sequência de dígitos no HTML inteiro:
-- Buscar apenas em contextos relevantes: links `tel:`, `href="tel:"`, `href="whatsapp"`, atributos `data-phone`
-- Buscar texto próximo a palavras-chave: "telefone", "tel", "whatsapp", "contato", "fone", "ligue"
-- Ignorar números dentro de tags `<script>`, `<style>`, atributos CSS
-- Validar o número encontrado: deve ter DDD válido (11-99) e formato brasileiro
-
-### 3. Validação de números brasileiros
-
-Adicionar função de validação:
-- DDD deve estar entre 11 e 99
-- Celular: 9 dígitos (começa com 9)
-- Fixo: 8 dígitos
-- Rejeitar números que não passem nessa validação
-
-### 4. Usar dados do CSV quando disponíveis
-
-O frontend já envia `companyName`, `website`, `city`, `state`. Adicionar campo opcional `existingPhones` para enviar telefones que já existem na planilha (Corporate Phone, etc.), evitando buscas desnecessárias.
-
-## Arquivo alterado
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/find-phone/index.ts` | Inverter prioridade (Places primeiro), melhorar regex/contexto de scraping, validação de DDD brasileiro |
-| `src/pages/FindContacts.tsx` | Enviar telefones existentes do CSV no payload para evitar buscas redundantes |
+## Fase 3 — Automação
+- Nas Configurações: opção "Enriquecer automaticamente ao importar".
+- A fila continua rodando no servidor mesmo com a aba fechada.
 
 ## Detalhes técnicos
-
-**Novo fluxo da edge function:**
-1. Se o contato já tem telefone existente → retornar normalizado
-2. Google Places API (se API key configurada) → buscar por nome + cidade
-3. Fallback: scrape do site, mas apenas em contextos `tel:` e próximo a palavras-chave de contato
-4. Normalizar resultado final com `+55DDDTELEFONE`
-
-**Scraping melhorado:**
-```
-// Extrair de links tel:
-const telLinks = html.match(/href=["']tel:([^"']+)["']/gi)
-
-// Extrair próximo a keywords de contato
-// Buscar em seções "contato", "footer", ignorar <script>/<style>
-```
-
-**Validação:**
-```
-function isValidBrazilianPhone(digits: string): boolean {
-  // DDD: 11-99, número: 8-9 dígitos
-  if (digits.length < 10 || digits.length > 11) return false;
-  const ddd = parseInt(digits.slice(0, 2));
-  return ddd >= 11 && ddd <= 99;
-}
-```
-
+- Novas colunas em `leads`: `stage_{empresa,presenca,ia,mensagem}_status/_at/_error`, `cnpj_confidence`, `razao_social`, `situacao_cadastral`, `cnae`, `porte`, `data_abertura`, `capital_social`, `qsa jsonb`, `decisor_qualificacao`, `score_ia int`, `temperatura`, `maturidade`, `resumo_ia`, `sinais jsonb`, `raw_sources jsonb`, `incompleto_motivo`, `phone_e164` (único para deduplicar).
+- Tabela `cnpj_cache` e tabela `enrichment_jobs` (fila). Uma função no servidor `run-pipeline` processa os leads em lotes e reutiliza a lógica atual de `enrich-lead`.
+- `Leads.tsx` (73k) dividido em: `LeadsHeader`, `LeadsFilterBar`, `FiltersPopover`, `TemperatureTabs`, `ActiveChips`, `LeadsTable`, `ColumnsToggle`, `LeadDrawer`, `BulkBar`, `EnrichMenu`, hooks `useLeadFilters` (URL) e `usePipelineProgress`.
+- Rubrica em `src/config/scoreRubric.ts`, também usada pela função no servidor.

@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      cnpj_cache: {
+        Row: {
+          cnpj: string
+          created_at: string
+          data: Json
+        }
+        Insert: {
+          cnpj: string
+          created_at?: string
+          data: Json
+        }
+        Update: {
+          cnpj?: string
+          created_at?: string
+          data?: Json
+        }
+        Relationships: []
+      }
       deleted_leads: {
         Row: {
           cnpj: string | null
@@ -40,12 +58,17 @@ export type Database = {
       }
       leads: {
         Row: {
+          capital_social: number | null
           cidade: string | null
+          cnae: string | null
           cnpj: string | null
+          cnpj_confidence: string | null
           commercial_score: number | null
           created_at: string
+          data_abertura: string | null
           debug_raw_data: Json | null
           decisor_linkedin: string | null
+          decisor_qualificacao: string | null
           decisor_telefone: string | null
           endereco: string | null
           enrich_business_at: string | null
@@ -63,6 +86,7 @@ export type Database = {
           google_review_count: number | null
           google_scrape_status: string | null
           id: string
+          incompleto_motivo: string | null
           instagram: string | null
           instagram_last_post_days: number | null
           instagram_profile_is_person: boolean | null
@@ -71,31 +95,58 @@ export type Database = {
           kommo_imported_at: string | null
           lead_quality: string | null
           linkedin: string | null
+          maturidade: number | null
           mensagem_gerada_em: string | null
           mensagem_personalizada: string | null
           mensagem_pontos_usados: Json | null
           mensagem_status: string | null
           nome_decisor: string | null
           nome_empresa: string
+          phone_e164: string | null
           phone_type: string | null
+          porte: string | null
+          qsa: Json | null
           query_origem: string | null
+          raw_sources: Json | null
+          razao_social: string | null
+          resumo_ia: string | null
           score: number | null
           score_breakdown: Json | null
           sinais_negativos: Json | null
           sinais_positivos: Json | null
           site: string | null
+          situacao_cadastral: string | null
+          stage_empresa_at: string | null
+          stage_empresa_error: string | null
+          stage_empresa_status: string | null
+          stage_ia_at: string | null
+          stage_ia_error: string | null
+          stage_ia_status: string | null
+          stage_mensagem_at: string | null
+          stage_mensagem_error: string | null
+          stage_mensagem_status: string | null
+          stage_presenca_at: string | null
+          stage_presenca_error: string | null
+          stage_presenca_status: string | null
           tags: string[] | null
           telefone: string | null
+          temperatura: string | null
           termo_pesquisa: string | null
           tier: string | null
+          uf: string | null
         }
         Insert: {
+          capital_social?: number | null
           cidade?: string | null
+          cnae?: string | null
           cnpj?: string | null
+          cnpj_confidence?: string | null
           commercial_score?: number | null
           created_at?: string
+          data_abertura?: string | null
           debug_raw_data?: Json | null
           decisor_linkedin?: string | null
+          decisor_qualificacao?: string | null
           decisor_telefone?: string | null
           endereco?: string | null
           enrich_business_at?: string | null
@@ -113,6 +164,7 @@ export type Database = {
           google_review_count?: number | null
           google_scrape_status?: string | null
           id?: string
+          incompleto_motivo?: string | null
           instagram?: string | null
           instagram_last_post_days?: number | null
           instagram_profile_is_person?: boolean | null
@@ -121,31 +173,58 @@ export type Database = {
           kommo_imported_at?: string | null
           lead_quality?: string | null
           linkedin?: string | null
+          maturidade?: number | null
           mensagem_gerada_em?: string | null
           mensagem_personalizada?: string | null
           mensagem_pontos_usados?: Json | null
           mensagem_status?: string | null
           nome_decisor?: string | null
           nome_empresa: string
+          phone_e164?: string | null
           phone_type?: string | null
+          porte?: string | null
+          qsa?: Json | null
           query_origem?: string | null
+          raw_sources?: Json | null
+          razao_social?: string | null
+          resumo_ia?: string | null
           score?: number | null
           score_breakdown?: Json | null
           sinais_negativos?: Json | null
           sinais_positivos?: Json | null
           site?: string | null
+          situacao_cadastral?: string | null
+          stage_empresa_at?: string | null
+          stage_empresa_error?: string | null
+          stage_empresa_status?: string | null
+          stage_ia_at?: string | null
+          stage_ia_error?: string | null
+          stage_ia_status?: string | null
+          stage_mensagem_at?: string | null
+          stage_mensagem_error?: string | null
+          stage_mensagem_status?: string | null
+          stage_presenca_at?: string | null
+          stage_presenca_error?: string | null
+          stage_presenca_status?: string | null
           tags?: string[] | null
           telefone?: string | null
+          temperatura?: string | null
           termo_pesquisa?: string | null
           tier?: string | null
+          uf?: string | null
         }
         Update: {
+          capital_social?: number | null
           cidade?: string | null
+          cnae?: string | null
           cnpj?: string | null
+          cnpj_confidence?: string | null
           commercial_score?: number | null
           created_at?: string
+          data_abertura?: string | null
           debug_raw_data?: Json | null
           decisor_linkedin?: string | null
+          decisor_qualificacao?: string | null
           decisor_telefone?: string | null
           endereco?: string | null
           enrich_business_at?: string | null
@@ -163,6 +242,7 @@ export type Database = {
           google_review_count?: number | null
           google_scrape_status?: string | null
           id?: string
+          incompleto_motivo?: string | null
           instagram?: string | null
           instagram_last_post_days?: number | null
           instagram_profile_is_person?: boolean | null
@@ -171,23 +251,45 @@ export type Database = {
           kommo_imported_at?: string | null
           lead_quality?: string | null
           linkedin?: string | null
+          maturidade?: number | null
           mensagem_gerada_em?: string | null
           mensagem_personalizada?: string | null
           mensagem_pontos_usados?: Json | null
           mensagem_status?: string | null
           nome_decisor?: string | null
           nome_empresa?: string
+          phone_e164?: string | null
           phone_type?: string | null
+          porte?: string | null
+          qsa?: Json | null
           query_origem?: string | null
+          raw_sources?: Json | null
+          razao_social?: string | null
+          resumo_ia?: string | null
           score?: number | null
           score_breakdown?: Json | null
           sinais_negativos?: Json | null
           sinais_positivos?: Json | null
           site?: string | null
+          situacao_cadastral?: string | null
+          stage_empresa_at?: string | null
+          stage_empresa_error?: string | null
+          stage_empresa_status?: string | null
+          stage_ia_at?: string | null
+          stage_ia_error?: string | null
+          stage_ia_status?: string | null
+          stage_mensagem_at?: string | null
+          stage_mensagem_error?: string | null
+          stage_mensagem_status?: string | null
+          stage_presenca_at?: string | null
+          stage_presenca_error?: string | null
+          stage_presenca_status?: string | null
           tags?: string[] | null
           telefone?: string | null
+          temperatura?: string | null
           termo_pesquisa?: string | null
           tier?: string | null
+          uf?: string | null
         }
         Relationships: []
       }

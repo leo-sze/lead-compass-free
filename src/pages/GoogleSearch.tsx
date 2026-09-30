@@ -35,25 +35,35 @@ const NICHE_PRESETS: Record<string, { label: string; terms: string[] }> = {
 // ─── City subdivisions (zones / well-known bairros) ─────────────
 const CITY_SUBDIVISIONS: Record<string, string[]> = {
   "sao paulo": [
-    "Pinheiros", "Vila Madalena", "Itaim Bibi", "Moema", "Vila Olímpia",
-    "Jardins", "Brooklin", "Tatuapé", "Mooca", "Santana", "Perdizes",
-    "Lapa", "Ipiranga", "Vila Mariana", "Morumbi",
+    // Centro
+    "Sé", "República", "Bela Vista", "Consolação", "Liberdade", "Cambuci", "Santa Cecília", "Bom Retiro", "Aclimação", "Higienópolis",
+    // Oeste
+    "Pinheiros", "Vila Madalena", "Alto de Pinheiros", "Butantã", "Morumbi", "Vila Sônia", "Rio Pequeno", "Raposo Tavares", "Jaguaré", "Lapa", "Vila Leopoldina", "Perdizes", "Pompeia", "Barra Funda", "Água Branca", "Jardins", "Jardim Paulista", "Jardim Europa", "Cerqueira César",
+    // Sul
+    "Itaim Bibi", "Vila Olímpia", "Moema", "Brooklin", "Campo Belo", "Vila Mariana", "Saúde", "Jabaquara", "Ipiranga", "Sacomã", "Cursino", "Santo Amaro", "Chácara Santo Antônio", "Campo Limpo", "Capão Redondo", "Jardim Ângela", "Jardim São Luís", "Vila Andrade", "Socorro", "Interlagos", "Cidade Dutra", "Grajaú", "Pedreira", "Cidade Ademar", "Parelheiros",
+    // Norte
+    "Santana", "Tucuruvi", "Mandaqui", "Casa Verde", "Limão", "Freguesia do Ó", "Brasilândia", "Pirituba", "Jaraguá", "Perus", "Vila Maria", "Vila Guilherme", "Jaçanã", "Tremembé", "Vila Medeiros",
+    // Leste
+    "Tatuapé", "Mooca", "Belém", "Brás", "Pari", "Água Rasa", "Vila Prudente", "Sapopemba", "Vila Formosa", "Carrão", "Aricanduva", "Penha", "Vila Matilde", "Cangaíba", "Ermelino Matarazzo", "São Miguel Paulista", "Itaim Paulista", "Itaquera", "Guaianases", "Cidade Tiradentes", "São Mateus", "São Lucas", "Anália Franco", "Artur Alvim", "José Bonifácio", "Lajeado",
   ],
   "rio de janeiro": [
-    "Copacabana", "Ipanema", "Leblon", "Barra da Tijuca", "Botafogo",
-    "Tijuca", "Recreio", "Flamengo", "Méier", "Jacarepaguá",
+    // Zona Sul
+    "Copacabana", "Ipanema", "Leblon", "Botafogo", "Flamengo", "Laranjeiras", "Catete", "Glória", "Humaitá", "Urca", "Lagoa", "Jardim Botânico", "Gávea", "São Conrado", "Leme", "Cosme Velho",
+    // Centro
+    "Centro", "Lapa", "Santa Teresa", "Rio Comprido", "Estácio", "Cidade Nova", "Saúde", "Gamboa", "Santo Cristo",
+    // Zona Norte
+    "Tijuca", "Vila Isabel", "Grajaú", "Andaraí", "Maracanã", "São Cristóvão", "Méier", "Engenho Novo", "Cachambi", "Todos os Santos", "Lins de Vasconcelos", "Engenho de Dentro", "Piedade", "Madureira", "Cascadura", "Irajá", "Vila da Penha", "Penha", "Olaria", "Ramos", "Bonsucesso", "Ilha do Governador", "Pavuna", "Vista Alegre", "Vicente de Carvalho", "Rocha Miranda", "Bento Ribeiro", "Marechal Hermes", "Anchieta", "Ricardo de Albuquerque",
+    // Zona Oeste
+    "Barra da Tijuca", "Recreio dos Bandeirantes", "Jacarepaguá", "Freguesia", "Taquara", "Pechincha", "Tanque", "Anil", "Vargem Grande", "Camorim", "Itanhangá", "Bangu", "Realengo", "Padre Miguel", "Campo Grande", "Santa Cruz", "Sepetiba", "Guaratiba", "Deodoro", "Vila Valqueire", "Sulacap",
   ],
   "belo horizonte": [
-    "Savassi", "Lourdes", "Funcionários", "Buritis", "Belvedere",
-    "Castelo", "Pampulha", "Santa Tereza", "Cidade Nova",
+    "Savassi", "Lourdes", "Funcionários", "Centro", "Santo Agostinho", "Santo Antônio", "São Pedro", "Serra", "Anchieta", "Sion", "Cruzeiro", "Carmo", "Mangabeiras", "Belvedere", "Buritis", "Estoril", "Gutierrez", "Barroca", "Prado", "Calafate", "Padre Eustáquio", "Carlos Prates", "Coração Eucarístico", "Caiçara", "Alípio de Melo", "Castelo", "Ouro Preto", "Pampulha", "São Luiz", "Jaraguá", "Planalto", "Itapoã", "Santa Amélia", "Venda Nova", "Céu Azul", "Floramar", "Santa Tereza", "Floresta", "Sagrada Família", "Cidade Nova", "União", "Horto", "Santa Efigênia", "Barreiro", "Diamante", "Betânia", "Nova Suíça", "Havaí", "Salgado Filho", "Nova Granada", "Santa Lúcia", "Vila da Serra",
   ],
   "curitiba": [
-    "Batel", "Água Verde", "Bigorrilho", "Centro", "Cabral",
-    "Champagnat", "Ecoville", "Portão", "Boa Vista", "Mercês",
+    "Centro", "Batel", "Água Verde", "Bigorrilho", "Champagnat", "Mercês", "São Francisco", "Centro Cívico", "Alto da XV", "Alto da Glória", "Cristo Rei", "Jardim Botânico", "Rebouças", "Prado Velho", "Hugo Lange", "Juvevê", "Cabral", "Ahú", "Bom Retiro", "Boa Vista", "Bacacheri", "Bairro Alto", "Tarumã", "Santa Cândida", "Barreirinha", "Abranches", "Pilarzinho", "São Lourenço", "Vista Alegre", "Santa Felicidade", "Mossunguê", "Ecoville", "Campo Comprido", "Seminário", "Campina do Siqueira", "Santa Quitéria", "Vila Izabel", "Portão", "Fazendinha", "Novo Mundo", "Capão Raso", "Pinheirinho", "Xaxim", "Boqueirão", "Hauer", "Uberaba", "Cajuru", "Jardim das Américas", "Guabirotuba", "Capão da Imbuia", "Tatuquara", "Sítio Cercado", "Cidade Industrial", "CIC",
   ],
   "porto alegre": [
-    "Moinhos de Vento", "Bela Vista", "Petrópolis", "Menino Deus",
-    "Cidade Baixa", "Higienópolis", "Auxiliadora", "Mont'Serrat",
+    "Centro Histórico", "Cidade Baixa", "Bom Fim", "Farroupilha", "Independência", "Moinhos de Vento", "Rio Branco", "Mont'Serrat", "Auxiliadora", "Bela Vista", "Petrópolis", "Higienópolis", "Boa Vista", "Três Figueiras", "Chácara das Pedras", "Jardim Europa", "Passo d'Areia", "Cristo Redentor", "Jardim Lindóia", "São João", "Navegantes", "Floresta", "São Geraldo", "Santana", "Santa Cecília", "Jardim Botânico", "Partenon", "Menino Deus", "Praia de Belas", "Azenha", "Medianeira", "Santa Tereza", "Glória", "Teresópolis", "Cavalhada", "Tristeza", "Vila Assunção", "Ipanema", "Cristal", "Camaquã", "Nonoai", "Vila Nova", "Belém Novo", "Hípica", "Restinga", "Sarandi", "Rubem Berta", "Jardim Itu", "Protásio Alves", "Agronomia", "Lomba do Pinheiro", "Cidade Nova",
   ],
 };
 
